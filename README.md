@@ -60,7 +60,27 @@ python3 -m http.server 8765
 ```
 
 Then open http://localhost:8765/sonicview.html. Every push to `main` deploys to GitHub Pages via
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml), but only after the tests pass.
+
+### Tests
+
+The parser, model and analysis logic (rule problems, unused objects, compare, CSV export) have tests
+that run against `sonicview.html` itself, so there is no build step and nothing to install. You need
+Node.js 22 or newer:
+
+```bash
+node --test
+```
+
+[`tests/helpers/harness.js`](tests/helpers/harness.js) pulls the inline `<script>` out of the page and
+runs it in a `node:vm` sandbox with a small DOM stub. If you rename a function the tests use, update
+the list at the top of that file. [`tests/helpers/exp.js`](tests/helpers/exp.js) builds **synthetic**
+exports (`office()` is a ready-made small network). Use only documentation IPs (192.0.2.0/24,
+198.51.100.0/24, 203.0.113.0/24) and private ranges in fixtures, and never commit a real `.exp`.
+
+Tests with a `todo` option (⚠ in the output, counted as `todo` in the summary) describe known gaps.
+They assert the behaviour we want and do not fail the run. When you fix one, remove its `todo` option. The [Tests workflow](.github/workflows/tests.yml)
+runs on every push and pull request.
 
 ## Contributing
 
