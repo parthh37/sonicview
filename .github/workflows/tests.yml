@@ -1,0 +1,24 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  # pages.yml runs this before it deploys
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # No dependencies to install: the tests use only node:test and node:vm
+      - run: node --test

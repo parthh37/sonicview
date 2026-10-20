@@ -614,7 +614,7 @@ function saveFile(name,text,type){
 }
 function csvCell(v){
   let s=v==null?'':String(v);
-  if(/^[=+@\t\r]/.test(s)||/^-[^\d]/.test(s))s="'"+s;   /* stop spreadsheet formulas */
+  if(/^[=+@\t\r]/.test(s)||/^-(?!\d+(\.\d+)?$)[\s\S]/.test(s))s="'"+s;   /* stop spreadsheet formulas; plain negative numbers stay numbers */
   return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 }
 function saveCsv(name,lines){
