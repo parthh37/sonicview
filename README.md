@@ -105,7 +105,9 @@ node tools/update-csp.mjs
 
 The sample data is defined in [`tools/make-sample.mjs`](tools/make-sample.mjs). After you change it, run
 `node tools/make-sample.mjs` to rebuild the copy embedded in `sonicview.html`
-(`--raw` prints the settings as readable `key=value` lines instead).
+(`--raw` prints the settings as readable `key=value` lines instead). It sits in a non-running
+`<script type="text/plain">` block, so it needs no CSP hash. `tests/sample.test.js` checks that it still
+trips every rule problem once.
 
 ## Contributing
 
