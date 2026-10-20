@@ -75,16 +75,30 @@ for (const [name, rule, matches] of allowCases) {
   });
 }
 
-test('allow matching: an inbound allow rule with Any destination lets the forward in', {
-  todo: 'derive() needs r.dst to be set, so "WAN → LAN, Any → Any, HTTPS, Allow" is not seen as allowing the forward and a false "Port forward with no allow rule" is shown.',
-}, () => {
+test('allow matching: an inbound allow rule with Any destination lets the forward in', () => {
   assert.equal(forward(base().rule({ from: 'WAN', to: 'LAN', svc: 'HTTPS' })).allow.length, 1);
 });
 
-test('allow matching: a rule between inside zones does not let internet traffic in', {
-  todo: 'derive() ignores rule zones, so a LAN → LAN rule to the public IP counts as the allow rule for an inbound WAN forward.',
-}, () => {
+test('allow matching: a rule between inside zones does not let internet traffic in', () => {
   assert.equal(forward(base().rule({ from: 'LAN', to: 'LAN', dst: 'WAN Web IP', svc: 'HTTPS' })).allow.length, 0);
+});
+
+test('allow matching: rules must come from the zone of the inbound interface (WAN when Any, for a public address)', () => {
+  /* arrives on X0 (zone LAN) */
+  const inside = from => forward(office().host('Printer', '192.168.10.30').host('Printer VIP', '192.168.10.31')
+    .nat({ origDst: 'Printer VIP', transDst: 'Printer', inIf: 'X0' })
+    .rule({ from, to: 'LAN', dst: 'Printer VIP' })).allow.length;
+  eq([inside('LAN'), inside('WAN')], [1, 0]);
+  /* no inbound interface: taken as WAN */
+  const any = from => forward(office().host('Web Server', '192.168.10.20')
+    .nat({ origDst: '203.0.113.3', transDst: 'Web Server' })
+    .rule({ from, to: 'LAN', dst: '203.0.113.3' })).allow.length;
+  eq([any('WAN'), any('DMZ')], [1, 0]);
+  /* no inbound interface and an inside address: traffic can come from any zone */
+  const internal = from => forward(office().host('Printer', '192.168.10.30')
+    .nat({ origDst: '192.168.10.31', transDst: 'Printer' })
+    .rule({ from, to: 'LAN', dst: '192.168.10.31' })).allow.length;
+  eq([internal('LAN'), internal('DMZ')], [1, 1]);
 });
 
 /* ---------- the problem it feeds ---------- */

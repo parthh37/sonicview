@@ -104,14 +104,60 @@ test('Shadowing: rules in other zone pairs never hide each other', () => {
   eq(shadows(e), []);
 });
 
-test('Shadowing: several earlier rules that together cover a rule', {
-  todo: 'ruleProblems only checks one earlier rule at a time. Allow HTTP + Allow HTTPS together cover a later "Deny Web" (HTTP+HTTPS), but nothing is reported.',
-}, () => {
+test('Shadowing: several earlier rules that together cover a rule', () => {
   const e = base()
     .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTP' })
     .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTPS' })
     .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'Web', action: 'Deny' });
   eq(shadows(e).map(p => p.slice(0, 3)), [['High', 'Block never works', 3]]);
+});
+
+test('Shadowing: a set of rules is named in the why text; rules that add nothing are left out', () => {
+  sv.load(base()
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTP' })
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Net', svc: 'HTTP' }) /* HTTP again: #1 already takes it */
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'SSH' })  /* covers src and dst, but no Web port */
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTPS' })
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'Web', action: 'Deny' })
+    .map());
+  const [p] = sv.ruleProblems();
+  eq([p.kind, p.rule.n, p.other.n, p.others.map(r => r.n)], ['Block never works', 5, 1, [1, 4]]);
+  assert.match(p.why, /^Rules #1 and #4 are checked first and together allow all of this traffic\./);
+});
+
+test('Shadowing: source or destination addresses add up too, merged like addrCovers', () => {
+  const e = base()
+    .host('PC2', '192.168.10.51')
+    .range('PCs', '192.168.10.50', '192.168.10.51')
+    .host('DMZ Web2', '172.16.5.21', { zone: 'DMZ' })
+    .range('DMZ Webs', '172.16.5.20', '172.16.5.21', { zone: 'DMZ' })
+    .rule({ from: 'LAN', to: 'DMZ', src: 'PC', action: 'Deny' })
+    .rule({ from: 'LAN', to: 'DMZ', src: 'PC2', action: 'Deny' })
+    .rule({ from: 'LAN', to: 'DMZ', src: 'PCs', dst: 'DMZ Web', svc: 'SSH' })
+    .rule({ from: 'DMZ', to: 'LAN', dst: 'DMZ Web' })
+    .rule({ from: 'DMZ', to: 'LAN', dst: 'DMZ Web2' })
+    .rule({ from: 'DMZ', to: 'LAN', dst: 'DMZ Webs', svc: 'HTTPS' });
+  eq(shadows(e).map(p => p.slice(0, 3)), [['Medium', 'Allow never works', 3], ['Low', 'Never used (same result)', 6]]);
+});
+
+test('Shadowing: sets that mix allow and block, or that miss the schedule, are not added up', () => {
+  const e = base()
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTP', action: 'Deny' })
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTPS' })
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'Web', action: 'Discard' })
+    .rule({ from: 'DMZ', to: 'LAN', dst: 'PC', svc: 'HTTP', sched: 'Work Hours' })
+    .rule({ from: 'DMZ', to: 'LAN', dst: 'PC', svc: 'HTTPS' })
+    .rule({ from: 'DMZ', to: 'LAN', dst: 'PC', svc: 'Web', action: 'Deny' });
+  eq(shadows(e), []);
+});
+
+test('Shadowing: one covering rule is named on its own, even when a set before it covers too', () => {
+  const e = base()
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTP' })
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Web', svc: 'HTTPS' })
+    .rule({ from: 'LAN', to: 'DMZ', dst: 'DMZ Net' })
+    .rule({ from: 'LAN', to: 'DMZ', src: 'PC', dst: 'DMZ Web', svc: 'Web', action: 'Deny' });
+  eq(shadows(e), [['High', 'Block never works', 4, 3]]);
 });
 
 /* ---------- the default rule is checked last ---------- */
