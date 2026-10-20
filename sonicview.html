@@ -1,0 +1,2279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SonicView Firewall Visualizer</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f9f9f7;--surface:#fcfcfb;--surface2:#f0efec;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+  --line:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--accent:#2a78d6;--accent-soft:#e6f0fc;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--free:#e6e5df;--res:#c3c2b7;
+  --good:#0ca30c;--good-ink:#006300;--crit:#d03b3b;--warn:#fab219;
+  --q1:#cde2fb;--q2:#9ec5f4;--q3:#6da7ec;--q4:#3987e5;--q5:#256abf;--q6:#104281;
+  --qt1:#0b0b0b;--qt2:#0b0b0b;--qt3:#0b0b0b;--qt4:#fff;--qt5:#fff;--qt6:#fff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0d0d0d;--surface:#1a1a19;--surface2:#232321;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+    --line:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--accent:#3987e5;--accent-soft:#16263d;
+    --s1:#3987e5;--s2:#d95926;--s3:#199e70;--free:#2e2e2b;--res:#4a4a46;
+    --good-ink:#0ca30c;
+    --q1:#184f95;--q2:#1c5cab;--q3:#256abf;--q4:#3987e5;--q5:#6da7ec;--q6:#9ec5f4;
+    --qt1:#fff;--qt2:#fff;--qt3:#fff;--qt4:#0b0b0b;--qt5:#0b0b0b;--qt6:#0b0b0b;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0d0d0d;--surface:#1a1a19;--surface2:#232321;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+  --line:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--accent:#3987e5;--accent-soft:#16263d;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--free:#2e2e2b;--res:#4a4a46;
+  --good-ink:#0ca30c;
+  --q1:#184f95;--q2:#1c5cab;--q3:#256abf;--q4:#3987e5;--q5:#6da7ec;--q6:#9ec5f4;
+  --qt1:#fff;--qt2:#fff;--qt3:#fff;--qt4:#0b0b0b;--qt5:#0b0b0b;--qt6:#0b0b0b;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:hidden}
+a{color:var(--accent)}
+.muted{color:var(--muted)}
+.ink2{color:var(--ink2)}
+button,input,select{font:inherit;color:inherit}
+.stick{position:sticky;top:env(safe-area-inset-top,0px);z-index:20}
+.top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.brand{font-weight:650;font-size:16px;white-space:nowrap}
+.brand small{font-weight:400;color:var(--muted);margin-left:6px}
+.search{flex:1 1 220px;min-width:0}
+.search input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.btn{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--accent);color:#fff;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:var(--surface);color:var(--ink)}
+.tabs{display:flex;gap:2px;overflow-x:auto;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);scrollbar-width:thin}
+.tabs a{display:block;text-decoration:none;padding:10px 12px;cursor:pointer;color:var(--ink2);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs a[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tabs a .n{color:var(--muted);font-size:12px;margin-left:4px}
+main{max-width:1320px;margin:0 auto;padding:16px}
+h2{font-size:18px;margin:22px 0 10px}
+h2:first-child{margin-top:4px}
+h3{font-size:15px;margin:0 0 8px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+.note{font-size:13px;color:var(--ink2);background:var(--surface2);border-radius:8px;padding:8px 12px;margin:8px 0 12px}
+/* drop screen */
+.drop{max-width:640px;margin:8vh auto;text-align:center;border:2px dashed var(--axis);border-radius:16px;padding:40px 24px;background:var(--surface)}
+.drop h1{font-size:22px;margin:0 0 8px}
+.drop p{color:var(--ink2);margin:6px 0}
+.drop .btn{margin-top:14px;font-size:15px;padding:10px 18px}
+.err{color:var(--crit);font-weight:600}
+#dragOverlay{position:fixed;inset:0;z-index:99;display:none;align-items:center;justify-content:center;background:rgba(42,120,214,.15);border:4px dashed var(--accent);font-size:22px;font-weight:650;color:var(--ink)}
+body.dragging #dragOverlay{display:flex}
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tile{display:block;color:inherit;text-decoration:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left}
+.tile:hover{border-color:var(--accent)}
+.tile .v{font-size:26px;font-weight:650;line-height:1.1}
+.tile .l{color:var(--ink2);font-size:13px}
+.tile .s{color:var(--muted);font-size:12px}
+.sysline{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--ink2);margin-bottom:12px}
+.sysline b{color:var(--ink);font-weight:600}
+/* diagram */
+.diagram{display:flex;flex-direction:column;align-items:center;gap:0}
+.dg-row{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;width:100%}
+.dg-link{width:2px;height:22px;background:var(--axis)}
+.cloud{padding:6px 18px;border-radius:999px;background:var(--surface2);color:var(--ink2);font-weight:600}
+.fwbox{background:var(--ink);color:var(--surface);border-radius:12px;padding:10px 22px;text-align:center;font-weight:650}
+.fwbox small{display:block;font-weight:400;opacity:.75}
+.node{display:block;color:inherit;text-decoration:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 11px;min-width:190px;max-width:260px;font-size:13px;cursor:pointer}
+.node:hover{border-color:var(--accent)}
+.node .nm{font-weight:650}
+.node .ip{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.node .cm{color:var(--ink2)}
+.node .kv{color:var(--muted);font-size:12px}
+.zonecol{background:var(--surface2);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:210px}
+.zonecol>.zt{font-weight:650;font-size:13px;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+/* tables */
+.tblwrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.tfilter{flex:1 1 200px;min-width:0;padding:6px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg)}
+.tg{font-size:13px;color:var(--ink2);white-space:nowrap;cursor:pointer}
+.tcount{font-size:12px;margin-left:auto}
+.tbar .csvbtn{padding:3px 10px;font-size:12px}
+.tscroll{overflow:auto;max-height:72vh}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{position:sticky;top:0;background:var(--surface);text-align:left;font-weight:600;color:var(--ink2);padding:8px 10px;border-bottom:1px solid var(--axis);cursor:pointer;white-space:nowrap;user-select:none}
+th[data-sort="asc"]::after{content:" ▲";font-size:10px}
+th[data-sort="desc"]::after{content:" ▼";font-size:10px}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.mono,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+td.wrap{max-width:340px}
+tr.off td{opacity:.5}
+td.empty{text-align:center;color:var(--muted);padding:24px}
+.ref{text-decoration:none;border-bottom:1px dotted var(--accent);cursor:pointer}
+.any{color:var(--muted);font-style:italic}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--surface2);color:var(--ink2)}
+.badge::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.b-allow{color:var(--good-ink)}
+.b-deny{color:var(--crit)}
+.b-off{color:var(--muted)}
+.b-warn{color:#a86d00}
+:root[data-theme="dark"] .b-warn{color:var(--warn)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .b-warn{color:var(--warn)}}
+.b-plain::before{display:none}
+.arrow{color:var(--muted);padding:0 2px}
+.sub{display:block;color:var(--muted);font-size:12px}
+/* zone matrix */
+.matrix{overflow:auto}
+.matrix table{width:auto}
+.matrix th,.matrix td{border:0;padding:0}
+.matrix th{position:static;font-size:12px;padding:4px 6px;cursor:default;background:none}
+.matrix th.col{writing-mode:vertical-rl;transform:rotate(180deg);text-align:left;height:110px;vertical-align:bottom}
+.matrix th.row{text-align:right}
+.mc{width:44px;height:30px;margin:1px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums}
+.mc.z{background:var(--surface2);color:transparent;cursor:default}
+.mc.sel{outline:2px solid var(--ink);outline-offset:1px}
+.q1{background:var(--q1);color:var(--qt1)}.q2{background:var(--q2);color:var(--qt2)}.q3{background:var(--q3);color:var(--qt3)}
+.q4{background:var(--q4);color:var(--qt4)}.q5{background:var(--q5);color:var(--qt5)}.q6{background:var(--q6);color:var(--qt6)}
+.split{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.split>.card{justify-self:start;max-width:100%}
+@media (max-width:900px){.split{grid-template-columns:minmax(0,1fr)}}
+/* ip map */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:7px 11px;cursor:pointer;text-align:left;font-size:13px}
+.chip[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.chip .mono{display:block}
+.chip .c{font-size:12px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--ink2);margin:10px 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.st-iface{background:var(--s1)}
+.st-used{background:var(--s2)}
+.st-dhcp{background:var(--s3)}
+.st-free{background:var(--free);box-shadow:inset 0 0 0 1px var(--border)}
+.st-res{background:repeating-linear-gradient(135deg,var(--res) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1px var(--border)}
+.ipgrid{display:grid;gap:2px;grid-template-columns:44px repeat(var(--cols),minmax(14px,26px));align-items:center;max-width:100%}
+.ipgrid .rl{font-size:11px;color:var(--muted);text-align:right;padding-right:6px;font-variant-numeric:tabular-nums}
+.cell{aspect-ratio:1;border-radius:4px;cursor:pointer}
+.cell:hover{outline:2px solid var(--ink);outline-offset:1px}
+.blocks{display:grid;grid-template-columns:repeat(16,minmax(10px,18px));gap:2px;margin:6px 0 14px}
+.blk{aspect-ratio:1;border-radius:3px;cursor:pointer}
+.blk.e{background:var(--surface2);box-shadow:inset 0 0 0 1px var(--border)}
+.blk.sel{outline:2px solid var(--ink);outline-offset:1px}
+.pubtbl td:first-child{white-space:nowrap}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.freelist{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;column-width:220px;margin:0;padding-left:18px}
+.tip{position:fixed;z-index:100;max-width:360px;background:var(--ink);color:var(--surface);padding:7px 10px;border-radius:8px;font-size:12.5px;line-height:1.4;pointer-events:none;white-space:pre-line;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.sres h3,.detail h3{margin-top:18px}
+#subchips{scroll-margin-top:120px}
+.dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:0}
+.dl dt{color:var(--muted)}
+.dl dd{margin:0}
+.dl dd .ref{margin-right:10px}
+.foot a{color:inherit}
+.errbar{background:var(--crit);color:#fff;padding:8px 16px;font-weight:600}
+/* network map + port map */
+.mapbar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+.mapbar select{padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg)}
+.mapwrap{overflow:auto;padding:16px}
+.map{position:relative}
+.map svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.lk{fill:none;stroke:var(--axis);stroke-width:1.6}
+.lk.dash{stroke-dasharray:5 4}
+.lk.ok{stroke:var(--good)}
+.lk.warn{stroke:var(--warn);stroke-dasharray:5 4}
+.lk.dim{opacity:.1}
+.map .node{position:absolute;min-width:0;max-width:none;line-height:18px;padding:8px 11px}
+.map .node div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.map .node.vpnn{border-style:dashed}
+.map .node.off{opacity:.55}
+.map .node.src{border-color:var(--accent);background:var(--accent-soft)}
+.map .node.hl{border-color:var(--good);box-shadow:inset 0 0 0 1px var(--good)}
+.map .dim{opacity:.28}
+.cloudn{position:absolute;display:flex;align-items:center;justify-content:center;border-radius:999px;background:var(--surface2);color:var(--ink2);font-weight:650;border:1px solid var(--border)}
+.fwbar{position:absolute;background:var(--ink);color:var(--surface);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;font-weight:650;padding:16px 8px}
+.fwbar small{display:block;font-weight:400;opacity:.75}
+.zh{position:absolute;font-size:12px;font-weight:650;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em;background:none;border:0;padding:0;text-align:left;white-space:nowrap}
+button.zh{cursor:pointer;color:var(--accent)}
+.pill{position:absolute;top:-9px;right:8px;background:var(--good-ink);color:#fff;font-size:11px;line-height:17px;padding:0 7px;border-radius:999px;font-weight:600}
+.pnode{position:absolute;border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:3px 10px;text-align:left;cursor:pointer;line-height:1.3;overflow:hidden}
+.pnode:hover{border-color:var(--accent)}
+.pnode .t{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnode .u{color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnode.risky{border-color:var(--crit);box-shadow:inset 3px 0 0 var(--crit)}
+.pnode.sel{border-color:var(--accent);background:var(--accent-soft)}
+.colh{position:absolute;top:0;font-size:12px;font-weight:650;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.sw.ln{height:3px;width:18px;border-radius:2px}
+.sw.ln.ok{background:var(--good)}
+.sw.ln.warn{background:repeating-linear-gradient(90deg,var(--warn) 0 5px,transparent 5px 9px)}
+.sw.ln.plain{background:var(--axis)}
+.sw.bx{background:var(--surface);box-shadow:inset 0 0 0 2px var(--crit)}
+.sw.bx.hl{box-shadow:inset 0 0 0 2px var(--good)}
+.sw.bx.src{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+.pnode:focus-visible,.zh:focus-visible,.btn:focus-visible,.tabs a:focus-visible,.chip:focus-visible,.tile:focus-visible,.node:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tile.on{border-color:var(--accent);background:var(--accent-soft)}
+button.tile{font:inherit;color:inherit;width:100%}
+.replist{margin:0 0 12px;padding-left:20px}
+.replist li{margin:3px 0}
+.printonly{display:none}
+@media print{
+  .stick,.foot,.noprint,.tbar,#tip,#dragOverlay{display:none!important}
+  .printonly{display:block;font-size:20px;margin:0 0 10px}
+  body{background:#fff}
+  main{max-width:none;padding:0}
+  .tscroll{max-height:none;overflow:visible}
+  th{position:static}
+  tr{break-inside:avoid}
+  .ref{border:0;color:inherit}
+}
+/* migration guide */
+.gstep{margin:12px 0;padding:0}
+.gstep>summary{display:flex;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;list-style:none;font-weight:650;font-size:15px}
+.gstep>summary::-webkit-details-marker{display:none}
+.gstep>summary::after{content:"▾";color:var(--muted);font-weight:400}
+.gstep:not([open])>summary::after{content:"▸"}
+.gnum{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--surface2);color:var(--ink2);font-size:13px;flex:none}
+.gstep.gdone .gnum{background:var(--good-ink);color:#fff}
+.gcount{margin-left:auto;font-weight:400;font-size:13px;color:var(--muted);white-space:nowrap}
+.gbody{padding:0 14px 14px;min-width:0}
+.gbody h3{margin:16px 0 8px}
+.glist{list-style:none;margin:0 0 10px;padding:0}
+.glist li{margin:7px 0}
+.glist label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.glist ul{margin:4px 0 0;padding-left:18px}
+.gchk{width:17px;height:17px;margin:1px 0 0;flex:none;accent-color:var(--good-ink);cursor:pointer}
+.where{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+.note .where{margin-top:4px}
+.gprog{height:8px;border-radius:999px;background:var(--surface2);overflow:hidden;margin:12px 0 6px}
+.gprog>div{height:100%;width:0;background:var(--good);transition:width .2s}
+.ptable input{width:100%;min-width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg)}
+.btn[disabled]{opacity:.5;cursor:default}
+.foot{margin:30px 0 10px;color:var(--muted);font-size:12px;text-align:center}
+@media (max-width:600px){.node{min-width:0;width:100%;max-width:none}.zonecol{width:100%}}
+</style>
+</head>
+<body>
+<div class="stick">
+<header class="top">
+  <div class="brand">SonicView<small id="devname"></small></div>
+  <form id="searchForm" class="search" autocomplete="off"><input id="q" type="search" placeholder="Find an IP, port, name… (press Enter)" disabled></form>
+  <button id="openBtn" class="btn" type="button">Open file</button>
+  <button id="themeBtn" class="btn ghost" type="button" title="Switch light / dark">◐</button>
+  <input type="file" id="file" accept=".exp,.txt" hidden>
+</header>
+<nav id="tabs" class="tabs" hidden></nav>
+<div id="errBanner" class="errbar" hidden></div>
+</div>
+<main>
+  <section id="drop" class="drop">
+    <h1>Open a SonicWall settings file</h1>
+    <p>Drag your <b>.exp</b> file onto this page, or click the button.</p>
+    <p class="muted">The file stays on this computer. Nothing is uploaded.</p>
+    <button class="btn" type="button" id="dropBtn">Choose .exp file</button>
+    <p id="dropErr" class="err"></p>
+  </section>
+  <div id="views"></div>
+  <div class="foot" id="foot" hidden></div>
+</main>
+<div id="tip" class="tip" hidden></div>
+<div id="dragOverlay">Drop the .exp file to load it</div>
+
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const IPRE=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+function ip2n(s){const m=IPRE.exec(String(s||'').trim());if(!m)return null;const p=m.slice(1).map(Number);if(p.some(x=>x>255))return null;return p[0]*16777216+p[1]*65536+p[2]*256+p[3];}
+function n2ip(n){return [n>>>24&255,n>>>16&255,n>>>8&255,n&255].join('.');}
+function maskBits(mask){let n=ip2n(mask);if(n==null)return null;let c=0;while(c<32&&(n&0x80000000)){c++;n=(n<<1)>>>0;}return c;}
+function cidrMask(c){return c===0?0:(0xFFFFFFFF<<(32-c))>>>0;}
+const nz=ip=>!!ip&&ip!=='0.0.0.0';
+function isPrivate(n){return (n>>>24)===10||(n>>>20)===0xAC1||(n>>>16)===0xC0A8||(n>>>22)===0x191||(n>>>24)===127||(n>>>16)===0xA9FE;}
+function cmp(a,b){if(typeof a==='number'&&typeof b==='number')return a-b;return String(a??'').localeCompare(String(b??''),undefined,{numeric:true,sensitivity:'base'});}
+function rangeText(r){return r[0]===r[1]?n2ip(r[0]):n2ip(r[0])+' – '+n2ip(r[1]);}
+const H=(view,arg)=>'#/'+view+(arg!=null&&arg!==''?'/'+encodeURIComponent(arg):'');
+function go(h){if(location.hash===h)route();else location.hash=h;}
+const plural=(n,w)=>n+' '+(n===1?w:/[^aeiou]y$/.test(w)?w.slice(0,-1)+'ies':w+'s');
+function store(k,v){try{localStorage.setItem('sonicview.'+k,v)}catch(e){}}
+function load(k){try{return localStorage.getItem('sonicview.'+k)}catch(e){return null}}
+
+/* ---------- parse .exp ---------- */
+function parseExp(text){
+  const t=text.trim();
+  const b=t.replace(/&+$/,'').replace(/\s+/g,'');
+  let raw;
+  if(/^[A-Za-z0-9+/]+=*$/.test(b)){
+    try{raw=atob(b+'='.repeat((4-b.length%4)%4));}catch(e){throw new Error('The file could not be decoded. Is it a SonicWall .exp export?');}
+  }else raw=t;
+  if(!/^[A-Za-z0-9_]+=/.test(raw))throw new Error('This does not look like a SonicWall .exp export.');
+  const kv=new Map();
+  for(const part of raw.split('&')){
+    if(!part)continue;
+    const i=part.indexOf('=');
+    const k=i<0?part:part.slice(0,i);
+    let v=i<0?'':part.slice(i+1);
+    try{v=decodeURIComponent(v);}catch(e){try{v=unescape(v);}catch(_){}}
+    kv.set(k,v);
+  }
+  return kv;
+}
+
+/* ---------- model ---------- */
+const PROTO={1:'ICMP',2:'IGMP',6:'TCP',17:'UDP',41:'6over4',47:'GRE',50:'ESP',51:'AH',58:'ICMPv6',108:'IPcomp'};
+const ADDRTYPE={1:'Host',2:'Range',4:'Network',8:'Group',mac:'MAC',fqdn:'FQDN'};
+let M=null;
+
+function buildModel(kv){
+  const G=(k,i)=>kv.get(k+'_'+i)??'';
+  const NC=new Map();const N=k=>{if(NC.has(k))return NC.get(k);let i=0;while(kv.has(k+'_'+i))i++;NC.set(k,i);return i;};
+  const m={kv,rangeCache:new Map(),svcCache:new Map()};
+  m.sys={model:kv.get('shortProdName')||'SonicWall',fw:kv.get('buildNum')||'',serial:kv.get('serialNumber')||kv.get('serial')||'',
+    name:kv.get('firewallName')||'',dns:[1,2,3].map(i=>kv.get('dnsServer'+i)).filter(nz)};
+
+  /* zones */
+  m.zones=[];m.zoneInfo=[];
+  for(let i=0;i<N('zoneObjId');i++){
+    m.zones.push(G('zoneObjId',i));
+    m.zoneInfo.push({name:G('zoneObjId',i),props:G('zoneObjProperties',i),type:+G('zoneObjZoneType',i),
+      sec:[['Gateway Anti-Virus','zoneObjGavProfile'],['Intrusion Prevention','zoneObjMyIDPProfile'],['Anti-Spyware','zoneObjASProfile'],['App Control','zoneObjACProfile']].filter(([,k])=>G(k,i)==='1').map(([l])=>l)});
+  }
+
+  /* schedules */
+  m.scheds=[];for(let i=0;i<N('schedObjId');i++)m.scheds.push({name:G('schedObjId',i),props:G('schedObjProperties',i)});
+
+  /* interfaces */
+  m.ifaces=[];m.ifByNum=new Map();
+  for(let i=0;i<N('iface_name');i++){
+    const sip=G('iface_static_ip',i),lip=G('iface_lan_ip',i),dip=G('iface_dhcp_ip',i);
+    let ip='',mask='',mode='';
+    if(nz(sip)){ip=sip;mask=G('iface_static_mask',i);mode='Static';}
+    else if(nz(lip)){ip=lip;mask=G('iface_lan_mask',i);mode='Static';}
+    else if(nz(dip)){ip=dip;mask=G('iface_dhcp_mask',i);mode='DHCP';}
+    const zone=G('interface_Zone',i);
+    if(!zone&&!ip)mode='Unassigned';
+    const f={i,name:G('iface_name',i),ifnum:G('iface_ifnum',i),zone,ip,mask,mode,
+      gw:nz(G('iface_static_gateway',i))&&ip===sip?G('iface_static_gateway',i):'',
+      comment:G('iface_comment',i),vlan:+G('iface_vlan_tag',i)||0,mac:G('eth_mac',i),mtu:G('eth_mtu',i),
+      mgmt:['https','http','ssh','ping','snmp'].filter(x=>G('iface_'+x+'_mgmt',i)==='1')};
+    f.ipn=ip2n(ip);f.cidr=maskBits(mask);
+    if(f.ipn!=null&&f.cidr!=null){f.net=(f.ipn&cidrMask(f.cidr))>>>0;f.size=2**(32-f.cidr);f.bc=f.net+f.size-1;}
+    f.parentNum=G('iface_vlan_parent',i);
+    m.ifaces.push(f);m.ifByNum.set(f.ifnum,f);
+  }
+  for(const f of m.ifaces)f.parent=f.parentNum&&f.parentNum!=='-1'?m.ifByNum.get(f.parentNum)?.name||'':'';
+  m.ifName=n=>n==='-1'||n===''?'':(m.ifByNum.get(n)?.name||('if '+n));
+
+  /* address objects */
+  m.addrs=new Map();
+  for(let i=0;i<N('addrObjId');i++){
+    const name=G('addrObjId',i);
+    m.addrs.set(name,{name,type:+G('addrObjType',i),zone:G('addrObjZone',i),ip1:G('addrObjIp1',i),ip2:G('addrObjIp2',i),props:G('addrObjProperties',i),members:[],memberOf:[]});
+  }
+  for(let i=0;i<N('addrObjMacId');i++){const name=G('addrObjMacId',i);m.addrs.set(name,{name,type:'mac',zone:G('addrObjMacZone',i),mac:G('addrObjMac',i),props:G('addrObjMacProperties',i),members:[],memberOf:[]});}
+  for(let i=0;i<N('addrObjFqdnId');i++){const name=G('addrObjFqdnId',i);m.addrs.set(name,{name,type:'fqdn',zone:G('addrObjFqdnZone',i),fqdn:G('addrObjFqdn',i),props:G('addrObjFqdnProperties',i),members:[],memberOf:[]});}
+  for(let i=0;i<N('addro_atomToGrp');i++){
+    const a=G('addro_atomToGrp',i),g=G('addro_grpToGrp',i);
+    m.addrs.get(g)?.members.push(a);m.addrs.get(a)?.memberOf.push(g);
+  }
+
+  /* service objects */
+  m.svcs=new Map();
+  for(let i=0;i<N('svcObjId');i++){
+    const name=G('svcObjId',i);
+    m.svcs.set(name,{name,props:G('svcObjProperties',i),type:+G('svcObjType',i),proto:+G('svcObjIpType',i),p1:+G('svcObjPort1',i),p2:+G('svcObjPort2',i),members:[],memberOf:[]});
+  }
+  for(let i=0;i<N('so_atomToGrp');i++){
+    const a=G('so_atomToGrp',i),g=G('so_grpToGrp',i);
+    m.svcs.get(g)?.members.push(a);m.svcs.get(a)?.memberOf.push(g);
+  }
+
+  /* NAT */
+  m.nat=[];
+  for(let i=0;i<N('natPolicyOrigSrc');i++){
+    const comment=G('natPolicyComment',i),props=G('natPolicyProperties',i);
+    m.nat.push({n:i+1,origSrc:G('natPolicyOrigSrc',i),origDst:G('natPolicyOrigDst',i),origSvc:G('natPolicyOrigSvc',i),
+      transSrc:G('natPolicyTransSrc',i),transDst:G('natPolicyTransDst',i),transSvc:G('natPolicyTransSvc',i),
+      inIf:m.ifName(G('natPolicySrcIface',i)),outIf:m.ifName(G('natPolicyDstIface',i)),
+      enabled:G('natPolicyEnabled',i)==='1',comment,props,reflexive:G('natPolicyReflexive',i)==='1',
+      auto:/^(auto[- ]?added|management nat policy|ike nat policy|stack nat policy)/i.test(comment)||['17407','25599','1023'].includes(props)});
+  }
+
+  /* firewall rules */
+  m.rules=[];
+  for(let i=0;i<N('policyAction');i++){
+    const a=G('policyAction',i),comment=G('policyComment',i),props=G('policyProps',i);
+    m.rules.push({n:i+1,action:{0:'Deny',1:'Discard',2:'Allow'}[a]||('Action '+a),from:G('policySrcZone',i),to:G('policyDstZone',i),
+      src:G('policySrcNet',i),dst:G('policyDstNet',i),svc:G('policyDstSvc',i),enabled:G('policyEnabled',i)==='1',
+      comment,sched:G('policyTime',i),whom:G('policyWhom',i),auto:props!=='0'||/^auto[- ]?added/i.test(comment)});
+  }
+
+  /* routes (policy based) */
+  m.routes=[];
+  for(let i=0;i<N('pbrObjId');i++){
+    m.routes.push({n:i+1,name:G('pbrObjId',i),src:G('pbrObjSrc',i),dst:G('pbrObjDst',i),svc:G('pbrObjSvc',i),gw:G('pbrObjGw',i),
+      iface:G('pbrObjIfaceName',i)||m.ifName(G('pbrObjIface',i)),metric:+G('pbrObjMetric',i)||0,priority:G('pbrObjPriority',i)});
+  }
+
+  /* DHCP scopes */
+  m.dhcp=[];
+  for(let i=0;i<N('prefs_dhdynstart');i++){
+    const s=G('prefs_dhdynstart',i),e=G('prefs_dhdynend',i);
+    const d={n:i+1,start:s,end:e,sn:ip2n(s),en:ip2n(e),router:G('prefs_dhdynrouter',i),mask:G('prefs_dhdynsubnetmask',i),
+      active:G('prefs_dhdynscopeactive',i)==='on',dns:[0,1,2].map(k=>G('prefs_dhdyndns'+k,i)).filter(nz),
+      lease:+G('prefs_dhdynlease',i)||0,domain:G('prefs_dhdyndomainname',i)};
+    d.iface=m.ifaces.find(f=>f.net!=null&&d.sn!=null&&d.sn>=f.net&&d.sn<=f.bc)?.name||'';
+    m.dhcp.push(d);
+  }
+
+  /* VPN */
+  m.vpn=[];
+  for(let i=0;i<N('ipsecName');i++){
+    m.vpn.push({n:i+1,name:G('ipsecName',i),gw:G('ipsecGwAddr',i),gw2:G('ipsecSecGwAddr',i),local:G('ipsecLocalNetwork',i),remote:G('ipsecRemoteNetwork',i),
+      enabled:G('ipsecSaDisabled',i)!=='on'});
+  }
+
+  /* users */
+  m.users=[];m.ugroups=[];
+  for(let i=0;i<N('userObjId');i++)m.users.push({name:G('userObjId',i),comment:G('userObjComment',i),memberOf:[]});
+  for(let i=0;i<N('userGroupObjId');i++)m.ugroups.push({name:G('userGroupObjId',i),comment:G('userGroupObjComment',i),members:[]});
+  for(let i=0;i<N('uo_atomToGrp');i++){
+    const a=G('uo_atomToGrp',i),g=G('uo_grpToGrp',i);
+    m.ugroups.find(x=>x.name===g)?.members.push(a);m.users.find(x=>x.name===a)?.memberOf.push(g);
+  }
+  return m;
+}
+
+/* address & service resolution */
+function addrRanges(name,seen=new Set()){
+  if(!name)return [];
+  if(M.rangeCache.has(name))return M.rangeCache.get(name);
+  if(seen.has(name))return [];
+  seen.add(name);
+  const a=M.addrs.get(name);let r=[];
+  if(!a){const n=ip2n(name);if(n!=null)r=[[n,n]];}
+  else if(a.type===1){const n=ip2n(a.ip1);if(n!=null)r=[[n,n]];}
+  else if(a.type===2){const s=ip2n(a.ip1),e=ip2n(a.ip2);if(s!=null&&e!=null)r=[[s,e]];}
+  else if(a.type===4){const n=ip2n(a.ip1),c=maskBits(a.ip2);if(n!=null&&c!=null){const s=(n&cidrMask(c))>>>0;r=[[s,s+2**(32-c)-1]];}}
+  else if(a.type===8)for(const x of a.members)r=r.concat(addrRanges(x,seen));
+  M.rangeCache.set(name,r);return r;
+}
+/* only hosts and small ranges (not whole networks) - used to mark single IPs as taken */
+function addrHosts(name,seen=new Set()){
+  if(!name||seen.has(name))return [];
+  seen.add(name);
+  const a=M.addrs.get(name);
+  if(!a){const n=ip2n(name);return n!=null?[[n,n]]:[];}
+  if(a.type===1){const n=ip2n(a.ip1);return n!=null?[[n,n]]:[];}
+  if(a.type===2){const s=ip2n(a.ip1),e=ip2n(a.ip2);return s!=null&&e!=null&&e-s<4096?[[s,e]]:[];}
+  if(a.type===8)return a.members.flatMap(x=>addrHosts(x,seen));
+  return [];
+}
+function addrValue(name){
+  const a=M.addrs.get(name);
+  if(!a)return name;
+  if(a.type===1)return a.ip1;
+  if(a.type===2)return a.ip1+' – '+a.ip2;
+  if(a.type===4){const c=maskBits(a.ip2);return a.ip1+'/'+(c??a.ip2);}
+  if(a.type==='mac')return (a.mac||'').replace(/(..)(?!$)/g,'$1:');
+  if(a.type==='fqdn')return a.fqdn;
+  if(a.type===8){const r=addrRanges(name);return plural(a.members.length,'member')+(r.length?': '+r.slice(0,4).map(rangeText).join(', ')+(r.length>4?' …':''):'');}
+  return '';
+}
+function addrTip(name){
+  const a=M.addrs.get(name);
+  if(!a)return name;
+  let t=(ADDRTYPE[a.type]||'Object')+(a.zone?' · zone '+a.zone:'');
+  if(a.type===8){const r=addrRanges(name);t+='\nMembers: '+a.members.join(', ');if(r.length)t+='\nIPs: '+r.slice(0,12).map(rangeText).join(', ')+(r.length>12?' …':'');}
+  else t+='\n'+addrValue(name);
+  return t;
+}
+function svcLeaves(name,seen=new Set()){
+  if(seen.has(name))return [];seen.add(name);
+  const s=M.svcs.get(name);if(!s)return [];
+  if(s.type===2)return s.members.flatMap(x=>svcLeaves(x,seen));
+  return [s];
+}
+function svcText(s){
+  const p=PROTO[s.proto]||('IP proto '+s.proto);
+  if(s.proto===6||s.proto===17)return p+' '+(s.p1===s.p2?s.p1:s.p1+'–'+s.p2);
+  if(s.proto===1)return 'ICMP type '+s.p1;
+  return p;
+}
+function svcValue(name){
+  if(!name)return '';
+  if(M.svcCache.has(name))return M.svcCache.get(name);
+  const v=[...new Set(svcLeaves(name).map(svcText))].join(', ');
+  M.svcCache.set(name,v);return v;
+}
+function aRef(name,empty='Any'){
+  if(!name)return `<span class="any">${esc(empty)}</span>`;
+  const href=M.addrs.has(name)?H('addr',name):H('search',name);
+  return `<a class="ref" href="${href}" target="_blank" rel="noopener" data-tip="${esc(addrTip(name))}">${esc(name)}</a>`;
+}
+function sRef(name,empty='Any'){
+  if(!name)return `<span class="any">${esc(empty)}</span>`;
+  const href=M.svcs.has(name)?H('svc',name):H('search',name);
+  return `<a class="ref" href="${href}" target="_blank" rel="noopener" data-tip="${esc(svcValue(name)||name)}">${esc(name)}</a>`;
+}
+function ipSub(name){const v=M.addrs.get(name)?.type===8?'':addrValue(name);return v&&v!==name?`<span class="sub mono">${esc(v)}</span>`:'';}
+function svcSub(name){const v=svcValue(name);return v&&v!==name?`<span class="sub mono">${esc(v.length>60?v.slice(0,60)+' …':v)}</span>`:'';}
+function svcOverlap(a,b){
+  if(!a||!b)return true;
+  if(a===b)return true;
+  const la=svcLeaves(a),lb=svcLeaves(b);
+  return la.some(x=>lb.some(y=>x.proto===y.proto&&(x.proto!==6&&x.proto!==17||x.p1<=y.p2&&y.p1<=x.p2)));
+}
+function overlaps(ra,rb){return ra.some(a=>rb.some(b=>a[0]<=b[1]&&b[0]<=a[1]));}
+function ifaceZone(name){return M.ifaces.find(f=>f.name===name)?.zone||'';}
+
+/* ---------- derived: port forwards, IP claims, subnets ---------- */
+function derive(){
+  const m=M;
+  /* port forwards */
+  m.forwards=m.nat.filter(x=>x.transDst&&x.transDst!==x.origDst).map(x=>{
+    const pub=addrRanges(x.origDst),inside=addrRanges(x.transDst);
+    const publicHit=pub.some(r=>!isPrivate(r[0]))||ifaceZone(x.inIf)==='WAN';
+    const allow=m.rules.filter(r=>r.enabled&&r.action==='Allow'&&!r.auto&&r.dst&&(r.dst===x.origDst||overlaps(addrRanges(r.dst),pub))&&svcOverlap(r.svc,x.origSvc));
+    return {...x,pub,inside,kind:publicHit?'Inbound':'Internal',allow,
+      pubPorts:x.origSvc?svcValue(x.origSvc):'Any',inPorts:x.transSvc?svcValue(x.transSvc):(x.origSvc?'same':'Any')};
+  });
+  /* claims: IP -> list of uses */
+  const claims=new Map();
+  const claim=(n,kind,label)=>{if(n==null)return;let l=claims.get(n);if(!l)claims.set(n,l=[]);if(!l.some(c=>c.label===label))l.push({kind,label});};
+  for(const f of m.ifaces){
+    if(f.ipn!=null)claim(f.ipn,'iface',`${f.name} interface IP${f.comment?' ('+f.comment+')':''}`);
+    if(f.gw)claim(ip2n(f.gw),'iface',`${f.name} gateway (ISP router)`);
+  }
+  for(const a of m.addrs.values()){
+    if(a.type===1)claim(ip2n(a.ip1),'used',`Address object: ${a.name}`);
+    else if(a.type===2){const s=ip2n(a.ip1),e=ip2n(a.ip2);if(s!=null&&e!=null&&e-s<4096)for(let n=s;n<=e;n++)claim(n,'used',`In range object: ${a.name}`);}
+  }
+  for(const x of m.nat){
+    for(const [role,name] of [['original destination',x.origDst],['translated destination',x.transDst],['translated source',x.transSrc],['original source',x.origSrc]]){
+      if(!name)continue;
+      for(const r of addrHosts(name))for(let n=r[0];n<=r[1];n++)claim(n,'nat',`NAT #${x.n} ${role}${x.enabled?'':' (disabled)'}${x.comment?': '+x.comment:''}`);
+    }
+  }
+  for(const d of m.dhcp){
+    if(d.sn==null||d.en==null||d.en-d.sn>65536)continue;
+    for(let n=d.sn;n<=d.en;n++)claim(n,d.active?'dhcp':'dhcpoff',`DHCP pool ${d.start} – ${d.end}${d.active?'':' (scope turned off)'}`);
+  }
+  m.claims=claims;
+  /* subnets from interfaces */
+  const subs=new Map();
+  for(const f of m.ifaces){
+    if(f.net==null||f.cidr>=32)continue;
+    const k=n2ip(f.net)+'/'+f.cidr;
+    if(subs.has(k)){subs.get(k).ifaces.push(f);continue;}
+    subs.set(k,{key:k,net:f.net,cidr:f.cidr,size:f.size,bc:f.bc,ifaces:[f],zone:f.zone});
+  }
+  m.subnets=[...subs.values()].sort((a,b)=>(a.zone==='WAN'?0:1)-(b.zone==='WAN'?0:1)||a.net-b.net);
+  for(const s of m.subnets){
+    const c={iface:0,used:0,dhcp:0,free:0,res:0};const free=[];let fs=null;
+    for(let n=s.net;n<=s.bc;n++){
+      const st=ipStatus(n,s);c[st]++;
+      if(st==='free'){if(fs==null)fs=n;}else if(fs!=null){free.push([fs,n-1]);fs=null;}
+    }
+    if(fs!=null)free.push([fs,s.bc]);
+    s.counts=c;s.free=free;
+  }
+}
+function ipStatus(n,s){
+  if(s&&s.size>2&&(n===s.net||n===s.bc))return 'res';
+  const cl=M.claims.get(n);
+  if(!cl)return 'free';
+  if(cl.some(c=>c.kind==='iface'))return 'iface';
+  if(cl.some(c=>c.kind==='used'||c.kind==='nat'))return 'used';
+  if(cl.some(c=>c.kind==='dhcp'))return 'dhcp';
+  return 'free';
+}
+const STLABEL={iface:'Firewall interface / gateway',used:'Used in config (object or NAT)',dhcp:'DHCP pool (active)',free:'Free (not in config)',res:'Network / broadcast address'};
+function claimLines(cl,max=6){
+  const nat=cl.filter(c=>c.kind==='nat'),other=cl.filter(c=>c.kind!=='nat');
+  const lines=other.map(c=>c.label);
+  if(nat.length>3)lines.push(`Used in ${nat.length} NAT policies (${nat.filter(c=>!c.label.includes('(disabled)')).length} on)`);
+  else lines.push(...nat.map(c=>c.label));
+  return lines.length>max?lines.slice(0,max).concat('…'):lines;
+}
+function ipTip(n,s){
+  const st=ipStatus(n,s);
+  const cl=M.claims.get(n)||[];
+  return n2ip(n)+'\n'+STLABEL[st]+(cl.length?'\n• '+claimLines(cl,8).join('\n• '):'');
+}
+
+/* ---------- file download ---------- */
+function saveFile(name,text,type){
+  const url=URL.createObjectURL(new Blob([text],{type}));
+  const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+function csvCell(v){
+  let s=v==null?'':String(v);
+  if(/^[=+@\t\r]/.test(s)||/^-[^\d]/.test(s))s="'"+s;   /* stop spreadsheet formulas */
+  return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+}
+function saveCsv(name,lines){
+  const base=(M?.sys.model||'sonicview').replace(/\W+/g,'-')+'-'+String(name).replace(/\W+/g,'-').replace(/^-|-$/g,'');
+  saveFile(base+'.csv','﻿'+lines.map(l=>l.map(csvCell).join(',')).join('\r\n'),'text/csv;charset=utf-8');
+}
+
+/* ---------- table component ---------- */
+function makeTable({cols,rows,toggles=[],placeholder='Filter this table…',empty='Nothing to show.',rowClass,name}){
+  const el=document.createElement('div');el.className='tblwrap';
+  const st={q:'',sort:null,dir:1,tg:toggles.map(t=>!!t.on),ext:null};
+  el.innerHTML=`<div class="tbar"><input type="search" class="tfilter" placeholder="${esc(placeholder)}">${toggles.map((t,i)=>`<label class="tg"><input type="checkbox" data-i="${i}" ${t.on?'checked':''}> ${esc(t.label)}</label>`).join('')}<span class="tcount muted"></span><button type="button" class="btn ghost csvbtn" title="Save the rows shown as a CSV file">CSV</button></div><div class="tscroll"><table><thead><tr>${cols.map((c,i)=>`<th data-i="${i}" class="${c.num?'num':''}">${esc(c.label)}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`;
+  const tb=el.querySelector('tbody');
+  const txt=rows.map(r=>cols.map(c=>{const v=c.get(r);return v==null?'':String(v);}).join(' \u0001 ').toLowerCase());
+  function visible(){
+    let idx=rows.map((_,i)=>i);
+    if(st.q){const q=st.q.toLowerCase();idx=idx.filter(i=>txt[i].includes(q));}
+    toggles.forEach((t,k)=>{if(st.tg[k])idx=idx.filter(i=>t.test(rows[i]));});
+    if(st.ext)idx=idx.filter(i=>st.ext(rows[i]));
+    if(st.sort!=null){const c=cols[st.sort],sv=c.sort||c.get;idx.sort((a,b)=>cmp(sv(rows[a]),sv(rows[b]))*st.dir);}
+    return idx;
+  }
+  function render(){
+    const idx=visible();
+    tb.innerHTML=idx.slice(0,3000).map(i=>`<tr class="${rowClass?rowClass(rows[i]):''}">${cols.map(c=>`<td class="${c.num?'num ':''}${c.cls||''}">${c.html?c.html(rows[i]):esc(c.get(rows[i]))}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length}" class="empty">${esc(empty)}</td></tr>`;
+    el.querySelector('.tcount').textContent=`Showing ${idx.length} of ${rows.length}`;
+    el.querySelectorAll('th').forEach((th,i)=>th.dataset.sort=i===st.sort?(st.dir>0?'asc':'desc'):'');
+  }
+  el.querySelector('.csvbtn').addEventListener('click',()=>{
+    const cs=cols.filter(c=>c.label);
+    saveCsv(name||current,[cs.map(c=>c.label),...visible().map(i=>cs.map(c=>c.get(rows[i])))]);
+  });
+  el.querySelector('.tfilter').addEventListener('input',e=>{st.q=e.target.value.trim();render();});
+  el.querySelectorAll('.tg input').forEach(cb=>cb.addEventListener('change',()=>{st.tg[+cb.dataset.i]=cb.checked;render();}));
+  el.querySelectorAll('th').forEach(th=>th.addEventListener('click',()=>{const i=+th.dataset.i;if(st.sort===i){if(st.dir>0)st.dir=-1;else{st.sort=null;st.dir=1;}}else{st.sort=i;st.dir=1;}render();}));
+  render();
+  return {el,setExt(fn){st.ext=fn;render();},setQuery(q){st.q=q;el.querySelector('.tfilter').value=q;render();}};
+}
+const onOff=on=>on?'<span class="badge b-allow">On</span>':'<span class="badge b-off">Off</span>';
+const actBadge=a=>`<span class="badge ${a==='Allow'?'b-allow':'b-deny'}">${esc(a)}</span>`;
+function section(title,intro){const d=document.createElement('div');d.innerHTML=`<h2>${esc(title)}</h2>`+(intro?`<p class="note">${intro}</p>`:'');return d;}
+
+/* ---------- port map helpers ---------- */
+const WELLKNOWN={20:'FTP data',21:'FTP',22:'SSH',23:'Telnet',25:'SMTP',53:'DNS',80:'HTTP',110:'POP3',123:'NTP',135:'MS RPC',137:'NetBIOS',138:'NetBIOS',139:'NetBIOS',143:'IMAP',161:'SNMP',389:'LDAP',443:'HTTPS',445:'SMB',465:'SMTPS',500:'IKE',587:'Mail submit',636:'LDAPS',993:'IMAPS',995:'POP3S',1194:'OpenVPN',1433:'MS SQL',1521:'Oracle',1723:'PPTP',3306:'MySQL',3389:'RDP',5432:'PostgreSQL',5900:'VNC',8080:'HTTP alt',8443:'HTTPS alt'};
+const RISKY={21:'FTP',23:'Telnet',135:'MS RPC',139:'NetBIOS',161:'SNMP',445:'SMB',1433:'MS SQL',1521:'Oracle',3306:'MySQL',3389:'RDP',5432:'PostgreSQL',5900:'VNC'};
+const isTU=l=>l.proto===6||l.proto===17;
+function riskyIn(leaves){
+  const out=new Set();
+  for(const l of leaves){
+    if(!isTU(l))continue;
+    if(l.p2-l.p1>=1000){out.add('Wide port range');continue;}
+    for(const p in RISKY)if(+p>=l.p1&&+p<=l.p2)out.add(RISKY[p]);
+  }
+  return [...out];
+}
+/* risky services a forward opens to anyone on the internet */
+function portRisk(f){
+  if(f.origSrc||f.kind!=='Inbound')return [];
+  return f.origSvc?riskyIn(svcLeaves(f.origSvc)):['Any port'];
+}
+/* public IP -> port -> inside host graph for a list of port forwards */
+function portGraph(flows){
+  const byKey=new Map(),pubs=[],ports=[],hosts=[],edges=new Map();
+  const node=(arr,key,o)=>{let n=byKey.get(key);if(!n){n={key,flows:new Set(),risky:false,risk:new Set(),...o};byKey.set(key,n);arr.push(n);}return n;};
+  const edge=(a,b,f)=>{const ok=f.allow.length>0,k=a.key+'\u0001'+b.key+'\u0001'+ok;let e=edges.get(k);if(!e)edges.set(k,e={a:a.key,b:b.key,ok,flows:[]});if(!e.flows.includes(f.n))e.flows.push(f.n);};
+  const ifOf=n=>M.subnets.find(s=>n>=s.net&&n<=s.bc)?.ifaces[0]?.name||'';
+  const named=(name,empty)=>{if(!name)return {label:empty,sub:''};const v=addrValue(name);return v&&v!==name?{label:v,sub:name}:{label:name,sub:''};};
+  for(const f of flows){
+    const pn=named(f.origDst,'Any IP'),hn=named(f.transDst,'Any');
+    const pi=f.pub[0]?ifOf(f.pub[0][0]):'';
+    const p=node(pubs,'a:'+f.origDst,{label:pn.label,sub:[pn.sub,pi].filter(Boolean).join(' · '),sort:f.pub[0]?.[0]??-1});
+    const h=node(hosts,'h:'+f.transDst,{label:hn.label,sub:hn.sub,sort:f.inside[0]?.[0]??-1});
+    const open=!f.origSrc&&f.kind==='Inbound';
+    const lv=f.origSvc?svcLeaves(f.origSvc):[];
+    let pk;
+    if(!f.origSvc)pk=[{key:'p:any',label:'Any port',sub:'All ports and protocols',sort:-1,risk:['Any port']}];
+    else if(!lv.length||lv.length>6)pk=[{key:'s:'+f.origSvc,label:f.origSvc,sub:lv.length?plural(lv.length,'port item'):'',sort:lv.length?Math.min(...lv.map(l=>isTU(l)?l.p1:70000)):99999,risk:riskyIn(lv)}];
+    else pk=lv.map(l=>{const t=svcText(l);return {key:'p:'+t,label:t,sub:(isTU(l)&&l.p1===l.p2&&WELLKNOWN[l.p1])||(l.name!==t?l.name:''),sort:isTU(l)?l.p1+(l.proto===17?.5:0):70000+l.proto,risk:riskyIn([l])};});
+    p.flows.add(f.n);h.flows.add(f.n);
+    for(const x of pk){
+      const n=node(ports,x.key,{label:x.label,sub:x.sub,sort:x.sort});
+      n.flows.add(f.n);
+      if(open&&x.risk.length){n.risky=true;x.risk.forEach(r=>n.risk.add(r));}
+      edge(p,n,f);edge(n,h,f);
+    }
+  }
+  const by=(a,b)=>a.sort-b.sort||cmp(a.label,b.label);
+  pubs.sort(by);ports.sort(by);hosts.sort(by);
+  for(const n of byKey.values())n.tip=[n.label,n.sub,plural(n.flows.size,'path'),n.risky?'Risky, open to anyone: '+[...n.risk].join(', '):''].filter(Boolean).join('\n');
+  return {byKey,pubs,ports,hosts,edges:[...edges.values()]};
+}
+
+/* ---------- rule problems ---------- */
+const SECRET=/pass|pwd|secret|psk|key|crypt|token|community|cert|priv|authdata|authtext|otp|seed|hash|sharedsec/i;
+/* objects made by a person have properties 14 in the low bits; the rest are built in */
+const userMade=o=>o.props==null||o.props===''||((+o.props)&0xFFFF)===14;
+const SEVRANK={High:0,Medium:1,Low:2,Info:3};
+const sevBadge=s=>`<span class="badge ${{High:'b-deny',Medium:'b-warn',Low:'',Info:'b-off'}[s]}">${esc(s)}</span>`;
+function mergeRanges(r){
+  const out=[];
+  for(const x of [...r].sort((a,b)=>a[0]-b[0])){const l=out[out.length-1];if(l&&x[0]<=l[1]+1)l[1]=Math.max(l[1],x[1]);else out.push([x[0],x[1]]);}
+  return out;
+}
+/* true when every IP of the object is known (no FQDN or MAC inside) */
+function addrPure(name,seen=new Set()){
+  if(!name||seen.has(name))return true;
+  seen.add(name);
+  const a=M.addrs.get(name);
+  if(!a)return ip2n(name)!=null;
+  if(a.type===8)return a.members.every(x=>addrPure(x,seen));
+  return a.type===1||a.type===2||a.type===4;
+}
+function addrCovers(outer,inner){
+  if(!outer)return true;
+  if(!inner)return false;
+  if(outer===inner)return true;
+  if(!addrPure(inner))return false;
+  const o=mergeRanges(addrRanges(outer)),i=addrRanges(inner);
+  return i.length>0&&i.every(x=>o.some(y=>y[0]<=x[0]&&x[1]<=y[1]));
+}
+function svcCovers(outer,inner){
+  if(!outer)return true;
+  if(!inner)return false;
+  if(outer===inner)return true;
+  const o=svcLeaves(outer),i=svcLeaves(inner);
+  return i.length>0&&i.every(x=>o.some(y=>y.proto===x.proto&&(isTU(x)?y.p1<=x.p1&&x.p2<=y.p2:x.proto!==1||y.p1===x.p1)));
+}
+const isDefaultRule=r=>r.auto&&!r.src&&!r.dst&&!r.svc;
+function ruleProblems(){
+  if(M._problems)return M._problems;
+  const m=M,out=[];
+  const add=(sev,kind,o)=>out.push({sev,kind,...o});
+  /* rules that never match: an earlier rule in the same zone pair covers all their traffic */
+  const pairs=new Map();
+  for(const r of m.rules){if(!r.enabled)continue;const k=r.from+'\u0001'+r.to;if(!pairs.has(k))pairs.set(k,[]);pairs.get(k).push(r);}
+  for(const all of pairs.values()){
+    /* the firewall checks its default Any/Any/Any rule last */
+    const list=[...all.filter(r=>!isDefaultRule(r)),...all.filter(isDefaultRule)];
+    const seen=new Map();
+    list.forEach((r,i)=>{
+      const sig=[r.src,r.dst,r.svc,r.action,r.sched,r.whom].join('\u0001');
+      if(seen.has(sig)){const e=seen.get(sig);add('Medium','Duplicate rule',{rule:r,other:e,why:`Same as rule #${e.n}. One of them can go.`});return;}
+      seen.set(sig,r);
+      for(let j=0;j<i;j++){
+        const e=list[j];
+        if(e.sched&&e.sched!==r.sched)continue;
+        if(e.whom&&e.whom!=='0'&&e.whom!==r.whom)continue;
+        if(!addrCovers(e.src,r.src)||!addrCovers(e.dst,r.dst)||!svcCovers(e.svc,r.svc))continue;
+        const eA=e.action==='Allow',rA=r.action==='Allow';
+        if(eA===rA)add('Low','Never used (same result)',{rule:r,other:e,why:`Rule #${e.n} is checked first and covers all of this traffic. This rule changes nothing.`});
+        else if(eA)add('High','Block never works',{rule:r,other:e,why:`Rule #${e.n} is checked first and allows all of this traffic. This ${r.action} rule never blocks anything.`});
+        else add('Medium','Allow never works',{rule:r,other:e,why:`Rule #${e.n} is checked first and blocks all of this traffic. This allow rule never lets anything through.`});
+        break;
+      }
+    });
+  }
+  /* rules that open too much */
+  for(const r of m.rules){
+    if(!r.enabled||r.action!=='Allow')continue;
+    const inbound=r.from==='WAN'&&r.to!=='WAN';
+    if(inbound&&!r.svc&&(!r.src||!r.dst))add('High','Wide open from internet',{rule:r,why:`Allows every port from ${r.src?r.src:'anyone on the internet'} to ${r.dst?r.dst:'every host'} (zone ${r.to}).`});
+    else if(inbound&&!r.src&&r.svc){const k=riskyIn(svcLeaves(r.svc));if(k.length)add('High','Risky port open to internet',{rule:r,why:`Lets anyone on the internet reach ${k.join(', ')}.`});}
+    /* internet and multicast access for everyone is normal, so only zone-to-zone rules count here */
+    else if(!r.auto&&!r.src&&!r.dst&&!r.svc&&r.from!==r.to&&r.to!=='WAN'&&r.to!=='MULTICAST')add('Medium','Allows everything',{rule:r,why:`Every host in ${r.from} can reach every host in ${r.to} on every port. This is often a firewall default. Check that you want it.`});
+  }
+  /* names that point at nothing */
+  const missA=n=>n&&!m.addrs.has(n)&&ip2n(n)==null,missS=n=>n&&!m.svcs.has(n);
+  for(const r of m.rules){
+    const miss=[r.src,r.dst].filter(missA).concat([r.svc].filter(missS));
+    if(miss.length)add('Low','Uses a missing object',{rule:r,why:`Not found in the file: ${miss.join(', ')}.`});
+  }
+  for(const f of m.forwards)if(f.enabled&&f.kind==='Inbound'&&!f.allow.length)
+    add('Medium','Port forward with no allow rule',{nat:f,why:'Traffic is forwarded, but no allow rule lets it in. It is likely blocked, or the rule is missing.'});
+  for(const r of m.rules)if(!r.enabled&&!r.auto)add('Info','Turned off',{rule:r,why:'This rule is off. Delete it if nobody needs it.'});
+  out.sort((a,b)=>SEVRANK[a.sev]-SEVRANK[b.sev]||(a.rule||a.nat).n-(b.rule||b.nat).n);
+  return M._problems=out;
+}
+/* problems shown by default: no info items, no auto-added rules */
+const mainProblems=()=>ruleProblems().filter(p=>p.sev!=='Info'&&!p.rule?.auto);
+
+/* ---------- unused objects ---------- */
+function unusedObjects(){
+  if(M._unused)return M._unused;
+  const m=M;
+  /* every value in the file, leaving out the keys that define the objects themselves */
+  const values=def=>{const s=new Set();for(const [k,v] of m.kv)if(v&&v.length<=200&&!def.test(k))s.add(v);return s;};
+  const used=(map,refs)=>{
+    const u=new Set([...map.keys()].filter(n=>refs.has(n)));
+    const q=[...u];
+    while(q.length)for(const x of map.get(q.pop())?.members||[])if(!u.has(x)){u.add(x);q.push(x);}
+    return u;
+  };
+  const ua=used(m.addrs,values(/^(addrObj|addro_)/)),us=used(m.svcs,values(/^(svcObj|so_)/));
+  return M._unused={addrs:[...m.addrs.values()].filter(a=>!ua.has(a.name)),svcs:[...m.svcs.values()].filter(s=>!us.has(s.name))};
+}
+
+/* ---------- compare two files ---------- */
+function withModel(m,fn){const s=M;M=m;try{return fn();}finally{M=s;}}
+function snapshot(m){
+  if(m._snap)return m._snap;
+  return m._snap=withModel(m,()=>{
+    const S={};
+    S['Interfaces']=new Map(m.ifaces.filter(f=>f.ip||f.zone).map(f=>[f.name,[f.zone||'no zone',f.ip?f.ip+'/'+f.cidr:'no IP',f.gw&&'gateway '+f.gw,f.vlan&&'VLAN '+f.vlan,f.comment].filter(Boolean).join(' · ')]));
+    S['Zones']=new Map(m.zones.map(z=>[z,'zone']));
+    S['Address objects']=new Map([...m.addrs.values()].map(o=>[o.name,`${ADDRTYPE[o.type]||o.type}: ${o.type===8?[...o.members].sort().join(', '):addrValue(o.name)}${o.zone?' · zone '+o.zone:''}`]));
+    S['Service objects']=new Map([...m.svcs.values()].map(o=>[o.name,o.type===2?'Group: '+[...o.members].sort().join(', '):svcValue(o.name)]));
+    S['VPN']=new Map(m.vpn.map(v=>[v.name,[v.enabled?'on':'off','peer '+(v.gw||'-'),'local '+(v.local||'-'),'remote '+(v.remote||'-')].join(' · ')]));
+    S['DHCP']=new Map(m.dhcp.map(d=>[d.start+' – '+d.end,[d.active?'on':'off','gateway '+d.router,'DNS '+d.dns.join(', '),d.domain].filter(Boolean).join(' · ')]));
+    S['Users']=new Map([...m.users.map(u=>['User '+u.name,'groups: '+(u.memberOf.join(', ')||'-')]),...m.ugroups.map(g=>['Group '+g.name,'members: '+(g.members.join(', ')||'-')])]);
+    const st=x=>(x.enabled?'on':'off')+(x.comment?' · '+x.comment:'');
+    S._rules=m.rules.map(r=>({key:[r.from,r.to,r.src,r.dst,r.svc,r.action,r.sched,r.whom].join('\u0001'),st:st(r),show:`#${r.n} · ${st(r)}`,
+      label:`${r.action} ${r.from} → ${r.to} · ${r.src||'Any'} → ${r.dst||'Any'} · ${r.svc||'Any'}${r.sched?' · '+r.sched:''}`}));
+    S._nat=m.nat.map(x=>({key:[x.origSrc,x.origDst,x.origSvc,x.transSrc,x.transDst,x.transSvc,x.inIf,x.outIf].join('\u0001'),st:st(x),show:`#${x.n} · ${st(x)}`,
+      label:`${x.origSrc||'Any'} → ${x.origDst||'Any'} (${x.origSvc||'Any'}) becomes ${x.transSrc||'Original'} → ${x.transDst||'Original'} (${x.transSvc||'Original'})`}));
+    S._routes=m.routes.map(r=>({key:[r.src,r.dst,r.svc,r.gw,r.iface].join('\u0001'),st:r.name+' · metric '+r.metric,show:r.name+' · metric '+r.metric,
+      label:`${r.src||'Any'} → ${r.dst||'Any'} (${r.svc||'Any'}) via ${r.gw||'-'} on ${r.iface||'-'}`}));
+    S._other=new Map([...m.kv].filter(([k])=>!/_\d+$/.test(k)).map(([k,v])=>[k,SECRET.test(k)&&v?'•••• hidden':(v.length>200?`(long value, ${v.length} characters)`:v)]));
+    return S;
+  });
+}
+function diffModels(A,B){
+  const out=[];
+  const push=(area,change,item,before,after)=>out.push({area,change,item,before,after});
+  const byName=(area,a,b)=>{
+    for(const [k,v] of b){if(!a.has(k))push(area,'Added',k,'',v);else if(a.get(k)!==v)push(area,'Changed',k,a.get(k),v);}
+    for(const [k,v] of a)if(!b.has(k))push(area,'Removed',k,v,'');
+  };
+  for(const area of ['Interfaces','Zones','Address objects','Service objects','VPN','DHCP','Users'])byName(area,A[area],B[area]);
+  /* rules, NAT and routes have no names: match them by what they do */
+  for(const [area,key] of [['Firewall rules','_rules'],['NAT policies','_nat'],['Routes','_routes']]){
+    const pool=new Map();
+    for(const x of A[key]){if(!pool.has(x.key))pool.set(x.key,[]);pool.get(x.key).push(x);}
+    for(const y of B[key]){
+      const l=pool.get(y.key);
+      if(l&&l.length){const x=l.shift();if(x.st!==y.st)push(area,'Changed',y.label,x.show,y.show);}
+      else push(area,'Added',y.label,'',y.show);
+    }
+    for(const l of pool.values())for(const x of l)push(area,'Removed',x.label,x.show,'');
+  }
+  byName('Other settings',A._other,B._other);
+  return out;
+}
+
+/* ---------- migration: old firewall -> new firewall ---------- */
+/* the second file, shared by Compare and the Migration guide */
+let OTHER;
+function otherFile(){
+  if(OTHER===undefined){
+    OTHER=null;
+    const t=load('other');
+    if(t)try{OTHER={name:load('otherName')||'saved file',model:buildModel(parseExp(t))};}catch(e){}
+  }
+  return OTHER;
+}
+function setOther(text,name){
+  OTHER={name,model:buildModel(parseExp(text))};
+  store('other',text);store('otherName',name);
+  for(const v of Object.values(built))v._otherChanged?.();
+}
+/* settings that belong to one old file: port plan and guide ticks */
+const fileKey=()=>(M.sys.serial||M.sys.model)+'|'+fileName;
+function ifPlan(){try{return JSON.parse(load('ifmap.'+fileKey())||'{}')||{};}catch(e){return {};}}
+function setIfPlan(p){store('ifmap.'+fileKey(),JSON.stringify(p));}
+/* old port name -> new port name: what the user typed, else a port in the new file with the same IP, else the same name */
+function ifMap(A,B){
+  const plan=ifPlan(),map=new Map();
+  const byIp=ip=>B&&ip?B.ifaces.find(g=>g.ip===ip)?.name:'';
+  for(const f of [...A.ifaces].sort((a,b)=>(a.parent?1:0)-(b.parent?1:0))){
+    let n=plan[f.name];
+    /* a VLAN follows a parent port the user moved */
+    if(!n&&f.parent&&f.vlan&&plan[f.parent])n=plan[f.parent]+':V'+f.vlan;
+    if(!n)n=byIp(f.ip);
+    if(!n&&f.parent&&f.vlan)n=(map.get(f.parent)||f.parent)+':V'+f.vlan;
+    map.set(f.name,n||f.name);
+  }
+  return map;
+}
+/* built-in objects are named after their port ("X2 IP", "X0:V30 Subnet"); objects made by hand keep their name */
+function makeTr(A,map){
+  return name=>{
+    if(!name)return name;
+    const o=A.addrs.get(name)||A.svcs.get(name);
+    if(o&&userMade(o))return name;
+    if(map.has(name))return map.get(name);
+    const i=name.indexOf(' ');
+    return i>0&&map.has(name.slice(0,i))?map.get(name.slice(0,i))+name.slice(i):name;
+  };
+}
+/* what an address or service name means, so a renamed object still matches */
+function aSig(name){
+  if(!name)return 'any';
+  const a=M.addrs.get(name);
+  if(a?.type==='fqdn')return 'fqdn:'+String(a.fqdn).toLowerCase();
+  if(a?.type==='mac')return 'mac:'+String(a.mac).toLowerCase();
+  if(!addrPure(name))return null;
+  const r=mergeRanges(addrRanges(name));
+  return r.length?r.map(x=>x[0]+'-'+x[1]).join(','):null;
+}
+function sSig(name){
+  if(!name)return 'any';
+  const l=svcLeaves(name);
+  return l.length?[...new Set(l.map(x=>x.proto+':'+(isTU(x)?x.p1+'-'+x.p2:x.proto===1?x.p1:'')))].sort().join(','):null;
+}
+/* meaning of a name inside model m; names with no clear meaning fall back to the (translated) name */
+function sigOf(m,kind,name,tr){
+  const c=m._sig||(m._sig=new Map()),k=kind+'\u0001'+name;
+  let v=c.get(k);
+  if(v===undefined){v=withModel(m,()=>kind==='a'?aSig(name):sSig(name));c.set(k,v);}
+  return v??'n:'+(tr?tr(name):name);
+}
+const isGrp=(kind,o)=>kind==='a'?o.type===8:o.type===2;
+/* groups in build order: a group comes after the groups inside it */
+function groupOrder(map,kind){
+  const out=[],seen=new Set();
+  const visit=o=>{if(seen.has(o.name))return;seen.add(o.name);for(const x of o.members){const c=map.get(x);if(c&&isGrp(kind,c))visit(c);}out.push(o);};
+  for(const o of [...map.values()].filter(o=>isGrp(kind,o)).sort((a,b)=>cmp(a.name,b.name)))visit(o);
+  return out;
+}
+const ZTYPE={0:'Untrusted',1:'Trusted',2:'Public',4:'Wireless',5:'Encrypted',6:'Multicast',8:'SSL VPN'};
+/* single settings worth carrying over; a getter returns null when the file has no such setting */
+const KEYSETTINGS=[
+  ['DNS servers',kv=>{const v=[1,2,3].map(i=>kv.get('dnsServer'+i));return v.some(x=>x!=null)?v.filter(nz).join(', '):null;}],
+  ['Use NTP time servers','ntp_useNtp'],
+  ['SNMP','snmp_Enable'],
+  ['SNMP managers',kv=>{const v=[0,1,2,3].map(i=>kv.get('snmp_HostIP'+i));return v.some(x=>x!=null)?v.filter(nz).join(', '):null;}],
+  ['Syslog server','syslogServerName'],
+  ['LDAP server','ldapServerName'],
+  ['RADIUS server','Rad_prm_IP'],
+  ['SSL VPN','SSLVPNServerEnabled'],
+  ['SSL VPN client pool',kv=>kv.has('SslvpnsPPPStartIp')?[kv.get('SslvpnsPPPStartIp'),kv.get('SslvpnsPPPEndIp')].filter(nz).join(' – '):null],
+  ['L2TP VPN server','L2TPServerEnabled'],
+  ['WAN failover and load balancing','wlb_Enable'],
+  ['Gateway Anti-Virus','gavEnableScanning'],
+  ['Intrusion Prevention','isIDPEnabled'],
+  ['App Control','isAppCntrlEnabled'],
+  ['DPI-SSL','sslSpyEnabled'],
+  ['Botnet filter','botnetBlock'],
+  ['Geo-IP filter','geoEnforcement']
+];
+const settingVal=(kv,g)=>typeof g==='function'?g(kv):kv.has(g)?kv.get(g):null;
+const settingOn=v=>v!=null&&!['','off','0','0.0.0.0'].includes(v);
+const MSTATUS={Missing:0,Different:1,Check:2,Renamed:3,Found:4};
+const mBadge=s=>`<span class="badge ${{Missing:'b-deny',Different:'b-warn',Check:'b-warn',Renamed:'b-plain',Found:'b-allow'}[s]}">${esc(s==='Check'?'Check by hand':s)}</span>`;
+/* what the old firewall A has that the new firewall B does not; map = old port -> new port */
+function migrationCheck(A,B,map){
+  const rows=[],tr=makeTr(A,map);
+  const add=(area,status,id,item,old,now,todo)=>rows.push({area,status,id,item,old:old||'',now:now||'',todo:todo||''});
+  const ifn=n=>n?map.get(n)||n:'';
+  /* zones made by hand */
+  for(const z of A.zoneInfo.filter(userMade)){
+    if(B.zones.includes(z.name))add('Zones','Found','zone:'+z.name,z.name,ZTYPE[z.type]||'',ZTYPE[B.zoneInfo.find(x=>x.name===z.name)?.type]||'');
+    else add('Zones','Missing','zone:'+z.name,z.name,ZTYPE[z.type]||'','','Create this zone.');
+  }
+  /* ports */
+  const ifShow=x=>[x.zone||'no zone',x.ip?x.ip+'/'+x.cidr:'no IP',x.vlan?'VLAN '+x.vlan:''].filter(Boolean).join(' · ');
+  for(const f of A.ifaces.filter(f=>f.ip)){
+    const n=ifn(f.name),g=B.ifaces.find(x=>x.name===n),id='if:'+f.name,item=n!==f.name?f.name+' → '+n:f.name;
+    if(!g||!g.ip&&!g.zone)add('Interfaces','Missing',id,item,ifShow(f),g?ifShow(g):'',`Set up port ${n} on the new unit.`);
+    else if(g.zone!==f.zone||g.vlan!==f.vlan||f.mode!=='DHCP'&&(g.ip!==f.ip||g.cidr!==f.cidr))add('Interfaces','Different',id,item,ifShow(f),ifShow(g),'Check the zone, IP and VLAN.');
+    else add('Interfaces','Found',id,item,ifShow(f),ifShow(g));
+  }
+  /* address and service objects made by hand */
+  for(const [kind,area,mA,mB,pre] of [['a','Address objects',A.addrs,B.addrs,'addr:'],['s','Service objects',A.svcs,B.svcs,'svc:']]){
+    const val=(m,n)=>withModel(m,()=>kind==='a'?addrValue(n):svcValue(n));
+    const what=o=>isGrp(kind,o)?'Group':kind==='a'?ADDRTYPE[o.type]||o.type:'Service';
+    const ix=new Map();
+    for(const o of mB.values()){const s=sigOf(B,kind,o.name);if(!s.startsWith('n:')){const k=(isGrp(kind,o)?'g':'o')+s;if(!ix.has(k))ix.set(k,o.name);}}
+    for(const o of mA.values()){
+      if(!userMade(o))continue;
+      const id=pre+o.name,sa=sigOf(A,kind,o.name,tr),ov=what(o)+': '+val(A,o.name),b=mB.get(o.name);
+      if(b){
+        const nv=what(b)+': '+val(B,o.name);
+        let same=sa===sigOf(B,kind,o.name);
+        /* groups with names inside (FQDN, MAC): compare the member names */
+        if(same&&sa.startsWith('n:')&&isGrp(kind,o))same=o.members.map(tr).sort().join('\u0001')===[...b.members].sort().join('\u0001');
+        if(!same)add(area,'Different',id,o.name,ov,nv,'Same name, other value. Fix the value on the new unit.');
+        else if(kind==='a'&&o.zone&&b.zone&&o.zone!==b.zone)add(area,'Different',id,o.name,ov+' · zone '+o.zone,nv+' · zone '+b.zone,'Same value, other zone. Check the zone.');
+        else add(area,'Found',id,o.name,ov,nv);
+      }else{
+        const alt=sa.startsWith('n:')?null:ix.get((isGrp(kind,o)?'g':'o')+sa);
+        if(alt)add(area,'Renamed',id,o.name,ov,`Named “${alt}”: ${val(B,alt)}`,'Same value under another name. That is fine.');
+        else add(area,'Missing',id,o.name,ov,'',`Create this ${isGrp(kind,o)?'group':'object'}.`);
+      }
+    }
+  }
+  /* rules, NAT and routes have no names: match them by what they do */
+  /* first by meaning, then what is left by (translated) names, for objects whose value changed */
+  const match=(area,pre,listA,listB,key,label,show)=>{
+    const found=new Map(),left=new Set(listB);
+    for(const byName of [false,true]){
+      const pool=new Map();
+      for(const y of left){const k=key(B,y,null,byName);if(!pool.has(k))pool.set(k,[]);pool.get(k).push(y);}
+      for(const x of listA){
+        if(found.has(x))continue;
+        const l=pool.get(key(A,x,tr,byName));
+        if(!l?.length)continue;
+        const i=Math.max(0,l.findIndex(y=>y.enabled===x.enabled)),y=l.splice(i,1)[0];
+        found.set(x,{y,byName});left.delete(y);
+      }
+    }
+    for(const x of listA){
+      const f=found.get(x),id=pre+x.n;
+      if(!f)add(area,'Missing',id,label(x),show(x),'',x.enabled===false?'It was off on the old unit. Create it only if you need it.':'Create it on the new unit.');
+      else if(x.enabled!==f.y.enabled)add(area,'Different',id,label(x),show(x),show(f.y),x.enabled?'It is off on the new unit. Turn it on.':'It is on in the new unit but was off in the old one.');
+      else if(f.byName)add(area,'Different',id,label(x),show(x),show(f.y),'Same names, but an object in it has another value now. Check the objects.');
+      else add(area,'Found',id,label(x),show(x),show(f.y));
+    }
+  };
+  const st=x=>`#${x.n}`+(x.enabled===undefined?'':x.enabled?' · on':' · off');
+  const a=(m,n,t,bn)=>bn?'n:'+((t?t(n):n)||''):sigOf(m,'a',n,t),s=(m,n,t,bn)=>bn?'n:'+((t?t(n):n)||''):sigOf(m,'s',n,t);
+  match('Routes','route:',A.routes,B.routes,(m,r,t,bn)=>[a(m,r.src,t,bn),a(m,r.dst,t,bn),s(m,r.svc,t,bn),a(m,r.gw,t,bn),m===A?ifn(r.iface):r.iface].join('\u0001'),
+    r=>`${r.name}: ${r.src||'Any'} → ${r.dst||'Any'} (${r.svc||'Any'}) via ${r.gw||'-'} on ${r.iface||'-'}`,r=>`#${r.n} · ${r.name}`);
+  match('NAT policies','nat:',A.nat.filter(x=>!x.auto),B.nat,(m,x,t,bn)=>[a(m,x.origSrc,t,bn),a(m,x.origDst,t,bn),s(m,x.origSvc,t,bn),a(m,x.transSrc,t,bn),a(m,x.transDst,t,bn),s(m,x.transSvc,t,bn),m===A?ifn(x.inIf):x.inIf,m===A?ifn(x.outIf):x.outIf].join('\u0001'),
+    x=>`#${x.n} ${x.origSrc||'Any'} → ${x.origDst||'Any'} (${x.origSvc||'Any'}) becomes ${x.transSrc||'Original'} → ${x.transDst||'Original'} (${x.transSvc||'Original'})`,st);
+  match('Firewall rules','rule:',A.rules.filter(r=>!r.auto),B.rules,(m,r,t,bn)=>[r.from,r.to,a(m,r.src,t,bn),a(m,r.dst,t,bn),s(m,r.svc,t,bn),r.action,r.sched,r.whom==='0'?'':r.whom].join('\u0001'),
+    r=>`#${r.n} ${r.action} ${r.from} → ${r.to} · ${r.src||'Any'} → ${r.dst||'Any'} · ${r.svc||'Any'}${r.sched?' · '+r.sched:''}`,st);
+  /* DHCP */
+  const dShow=x=>[x.active?'on':'off','gateway '+x.router,'DNS '+(x.dns.join(', ')||'-'),x.domain].filter(Boolean).join(' · ');
+  for(const d of A.dhcp){
+    const e=B.dhcp.find(x=>x.start===d.start&&x.end===d.end),id='dhcp:'+d.start,item=d.start+' – '+d.end;
+    if(!e)add('DHCP','Missing',id,item,dShow(d),'','Create this DHCP scope.');
+    else if(dShow(d)!==dShow(e))add('DHCP','Different',id,item,dShow(d),dShow(e),'Same pool, other settings. Check them.');
+    else add('DHCP','Found',id,item,dShow(d),dShow(e));
+  }
+  /* site-to-site VPN */
+  const vShow=x=>[x.enabled?'on':'off','peer '+x.gw,'local '+(x.local||'-'),'remote '+(x.remote||'-')].join(' · ');
+  for(const v of A.vpn.filter(v=>nz(v.gw))){
+    const e=B.vpn.find(x=>x.name===v.name)||B.vpn.find(x=>x.gw===v.gw),id='vpn:'+v.name;
+    if(!e)add('VPN','Missing',id,v.name,vShow(v),'','Create this tunnel. Get the shared secret from the other side.');
+    else if(e.gw!==v.gw||a(A,v.local,tr)!==a(B,e.local)||a(A,v.remote,tr)!==a(B,e.remote)||e.enabled!==v.enabled)add('VPN','Different',id,v.name,vShow(v),vShow(e),'Check the peer, the networks and that it is on.');
+    else add('VPN','Found',id,v.name,vShow(v),vShow(e));
+  }
+  /* local users and groups */
+  for(const u of A.users){
+    const e=B.users.find(x=>x.name===u.name),id='user:'+u.name;
+    if(!e)add('Users','Missing',id,'User '+u.name,'groups: '+(u.memberOf.join(', ')||'-'),'','Create the user. Set a new password.');
+    else add('Users','Found',id,'User '+u.name,'groups: '+(u.memberOf.join(', ')||'-'),'groups: '+(e.memberOf.join(', ')||'-'));
+  }
+  for(const g of A.ugroups){
+    const e=B.ugroups.find(x=>x.name===g.name),id='ugrp:'+g.name,ms=x=>[...x.members].sort().join(', ')||'-';
+    if(!e)add('Users','Missing',id,'Group '+g.name,'members: '+ms(g),'','Create the group.');
+    else if(ms(g)!==ms(e))add('Users','Different',id,'Group '+g.name,'members: '+ms(g),'members: '+ms(e),'Add the missing members.');
+    else add('Users','Found',id,'Group '+g.name,'members: '+ms(g),'members: '+ms(e));
+  }
+  /* single settings */
+  for(const [label,g] of KEYSETTINGS){
+    const va=settingVal(A.kv,g);if(!settingOn(va))continue;
+    const vb=settingVal(B.kv,g),id='set:'+label;
+    if(vb==null)add('Settings','Check',id,label,va,'','The new file has no setting with this name. Check it by hand.');
+    else if(vb!==va)add('Settings','Different',id,label,va,vb,'Check that the new value is what you want.');
+    else add('Settings','Found',id,label,va,vb);
+  }
+  return rows;
+}
+
+/* ---------- migration guide ---------- */
+/* where each page is on the new unit; menus move between firmware versions, so the guide says "usually" */
+const WHERE={
+  '7':{lic:'Device › Settings › Licenses',fw:'Device › Settings › Firmware and Settings',admin:'Device › Settings › Administration',time:'Device › Settings › Time',
+    zones:'Object › Match Objects › Zones',ifaces:'Network › System › Interfaces',addrs:'Object › Match Objects › Addresses',svcs:'Object › Match Objects › Services',
+    sched:'Object › Match Objects › Schedules',routes:'Network › System › Dynamic Routing',dhcp:'Network › System › DHCP Server',users:'Device › Users › Local Users & Groups',
+    nat:'Policy › Rules and Policies › NAT Rules',rules:'Policy › Rules and Policies › Access Rules',vpn:'Network › IPSec VPN › Rules and Settings'},
+  '6':{lic:'Manage › Updates › Licenses',fw:'Manage › Updates › Firmware & Settings',admin:'Manage › System Setup › Appliance › Base Settings',time:'Manage › System Setup › Appliance › Time',
+    zones:'Manage › System Setup › Network › Zones',ifaces:'Manage › System Setup › Network › Interfaces',addrs:'Manage › Policies › Objects › Address Objects',svcs:'Manage › Policies › Objects › Service Objects',
+    routes:'Manage › System Setup › Network › Routing',dhcp:'Manage › System Setup › Network › DHCP Server',users:'Manage › System Setup › Users › Local Users & Groups',
+    nat:'Manage › Policies › Rules › NAT Policy',rules:'Manage › Policies › Rules › Access Rules',vpn:'Manage › Connectivity › VPN › Base Settings'}
+};
+function guideView(root){
+  const m=M,o=otherFile(),B=o?.model||null;
+  const key='guide.'+fileKey();
+  let done={};try{done=JSON.parse(load(key)||'{}')||{};}catch(e){}
+  const save=()=>store(key,JSON.stringify(done));
+  const target=['7','6','x'].includes(load('guideTarget'))?load('guideTarget'):'7';
+  const W=WHERE[target]||{};
+  const where=k=>W[k]?`<span class="where">Usually at: ${esc(W[k])}</span>`:'';
+  const map=ifMap(m,B),tr=makeTr(m,map),plan=ifPlan();
+  const nw=n=>n?map.get(n)||n:'';
+  const trT=n=>n&&tr(n)!==n?`${tr(n)} (old: ${n})`:n;
+  const unused=unusedObjects(),unA=new Set(unused.addrs.map(x=>x.name)),unS=new Set(unused.svcs.map(x=>x.name));
+  const chk=id=>`<input type="checkbox" class="gchk" data-id="${esc(id)}"${done[id]?' checked':''} aria-label="Done">`;
+  const doneCol={label:'Done',get:r=>done[r.id]?'yes':'',sort:r=>done[r.id]?1:0,html:r=>chk(r.id)};
+  const newName=t=>`<span class="sub">On the new unit: <b>${esc(t)}</b></span>`;
+  const nmA=n=>!n?'<span class="any">Any</span>':aRef(n)+(tr(n)!==n?newName(tr(n)):'')+ipSub(n);
+  const nmS=n=>!n?'<span class="any">Any</span>':sRef(n)+(tr(n)!==n?newName(tr(n)):'')+svcSub(n);
+  const used=m.ifaces.filter(f=>f.ip||f.zone).sort((a,b)=>cmp(a.parent||a.name,b.parent||b.name)||(a.parent?1:0)-(b.parent?1:0)||a.vlan-b.vlan);
+  const s2s=m.vpn.filter(v=>nz(v.gw)),gvpn=m.vpn.filter(v=>!nz(v.gw)&&v.enabled);
+  const steps=[];
+  const step=s=>steps.push(s);
+
+  /* 1 */
+  const secrets=['The admin password for the new unit. Pick a new, strong one.'];
+  if(s2s.length)secrets.push(`The VPN shared secrets for ${plural(s2s.length,'tunnel')}: ${s2s.map(v=>esc(v.name)).join(', ')}.`);
+  if(nz(m.kv.get('ldapServerName')))secrets.push(`The LDAP password for the user <b>${esc(m.kv.get('ldapServerBindName')||'that SonicWall uses')}</b>.`);
+  if(nz(m.kv.get('Rad_prm_IP')))secrets.push('The RADIUS shared secret.');
+  const tsa=[...m.kv].filter(([k,v])=>/^ssoTsaHost_\d+$/.test(k)&&nz(v)).length;
+  if(tsa)secrets.push(`The shared keys for ${plural(tsa,'Terminal Services agent')}.`);
+  if(m.kv.get('snmp_Enable')==='on')secrets.push('The SNMP community names. SonicView hides them. Read them on the old unit.');
+  if(m.users.length)secrets.push(`Passwords for ${plural(m.users.length,'local user')}. Passwords cannot be copied, so each user gets a new one.`);
+  step({id:'prep',title:'Before you start',list:[
+    ['prep:backup',`Keep a copy of this settings file (<b>${esc(fileName)}</b>). It is your backup of the old unit.`],
+    ['prep:tsr','On the old unit, save a Tech Support Report (TSR). It is a text file with every setting. Use it when this guide is not enough.'],
+    ['prep:tool',`Check SonicWall’s own Migration Tool on MySonicWall first. If it supports <b>${esc(m.sys.model)} ${esc(m.sys.fw)}</b> to your new model, you can use it. If not, use this guide.`],
+    ['prep:noimport','Do not import this old .exp file into the new unit. A settings file only imports on a supported model and firmware. A wrong import can break the new unit.'],
+    ['prep:secrets',`Collect the secrets this file cannot give you:<ul>${secrets.map(x=>`<li>${x}</li>`).join('')}</ul>`],
+    ['prep:window','Pick a time for the change (a maintenance window). Tell people that internet and VPN will stop for a short time.'],
+    ['prep:keep','Keep the old unit. Do not wipe it. It is your way back.']]});
+
+  /* 2 */
+  step({id:'unit',title:'Set up the new unit',list:[
+    ['unit:license','Register the new unit on MySonicWall. Move or buy the licenses (support and security services).'+where('lic')],
+    ['unit:firmware','Update the new unit to the newest firmware.'+where('fw')],
+    ['unit:admin','Set a new admin password.'+where('admin')],
+    ['unit:time','Set the time zone and the time (NTP) servers.'+where('time')],
+    ...(m.sys.dns.length?[['set:DNS servers',`Set the DNS servers: <b class="mono">${esc(m.sys.dns.join(', '))}</b>.`]]:[]),
+    ['unit:unplug','Keep the WAN cables of the new unit unplugged until the change day. Both units use the same public IPs. They must not be online at the same time.']]});
+
+  /* 3 */
+  const nPhys=used.filter(f=>!f.parent).length,nVlan=used.filter(f=>f.parent).length;
+  const twice=[...new Set(used.map(f=>nw(f.name)).filter((n,i,a)=>a.indexOf(n)!==i))];
+  step({id:'ports',title:'Plan the ports',
+    intro:`The old unit uses <b>${plural(nPhys,'port')}</b> and <b>${plural(nVlan,'VLAN')}</b>. Type the new port for each old port. Leave a box empty to use the grey name. ${B?'The grey name comes from the new unit’s file when the same IP is found there. ':''}VLANs follow their parent port. The later steps use this plan.`,
+    list:[['ports:ok','The port plan is right. Every old port has a port on the new unit.']],
+    after:(twice.length?`<p class="err">Two old ports use the same new port: ${esc(twice.join(', '))}. Fix the plan.</p>`:'')+`<div class="tblwrap"><div class="tscroll"><table class="ptable"><thead><tr><th>Old port</th><th>Zone</th><th>IP address</th><th>Comment</th><th>New port</th></tr></thead><tbody>${used.map(f=>`<tr><td><b>${esc(f.name)}</b></td><td>${esc(f.zone||'—')}</td><td class="mono">${esc(f.ip?f.ip+'/'+f.cidr:'')}</td><td>${esc(f.comment)}</td><td><input type="text" class="gport" data-old="${esc(f.name)}" value="${esc(plan[f.name]||'')}" placeholder="${esc(nw(f.name))}"${B?' list="gPorts"':''} aria-label="New port for ${esc(f.name)}"></td></tr>`).join('')}</tbody></table></div></div>${B?`<datalist id="gPorts">${B.ifaces.map(g=>`<option value="${esc(g.name)}">`).join('')}</datalist>`:''}`});
+
+  /* 4 */
+  step({id:'zones',title:'Zones',intro:'Built-in zones already exist on the new unit. Check that their security services match. Create the zones made by hand.'+where('zones'),
+    tables:[{name:'zones',rows:m.zoneInfo.map(z=>({id:'zone:'+z.name,z})),cols:[
+      {label:'Zone',get:r=>r.z.name},
+      {label:'Kind',get:r=>userMade(r.z)?'Made by hand':'Built in'},
+      {label:'Security type',get:r=>ZTYPE[r.z.type]||''},
+      {label:'Security services on',get:r=>r.z.sec.join(', '),cls:'wrap'},
+      {label:'Used by ports',get:r=>m.ifaces.filter(f=>f.zone===r.z.name).map(f=>nw(f.name)).join(', '),cls:'wrap'}]}]});
+
+  /* 5 */
+  step({id:'ifaces',title:'Interfaces (ports)',intro:'Make the zones first. Set up each port. Make VLAN sub-interfaces after their parent port. Leave the WAN cables unplugged.'+where('ifaces'),
+    tables:[{name:'interfaces',rows:used.map(f=>({id:'if:'+f.name,f})),cols:[
+      {label:'Old port',get:r=>r.f.name},
+      {label:'New port',get:r=>nw(r.f.name),html:r=>nw(r.f.name)!==r.f.name?`<b>${esc(nw(r.f.name))}</b>`:esc(r.f.name)},
+      {label:'Zone',get:r=>r.f.zone||'—'},
+      {label:'Mode',get:r=>r.f.mode},
+      {label:'IP address',get:r=>r.f.ip,cls:'mono',sort:r=>r.f.ipn??-1},
+      {label:'Mask',get:r=>r.f.mask,cls:'mono'},
+      {label:'Gateway',get:r=>r.f.gw,cls:'mono'},
+      {label:'VLAN',get:r=>r.f.parent?`${r.f.vlan} on ${nw(r.f.parent)}`:''},
+      {label:'Management',get:r=>r.f.mgmt.join(', ').toUpperCase()},
+      {label:'Comment',get:r=>r.f.comment,cls:'wrap'}]}]});
+
+  /* 6-9: objects, then groups in build order */
+  const tipA=n=>unA.has(n)?'Not used. You can skip it.':'',tipS=n=>unS.has(n)?'Not used. You can skip it.':'';
+  const hideUnused=t=>[{label:'Hide not used',on:false,test:r=>!t(r.o.name)}];
+  const aVal=a=>a.type===1?a.ip1:a.type===2?a.ip1+' – '+a.ip2:a.type===4?a.ip1+' mask '+a.ip2:addrValue(a.name);
+  step({id:'addrs',title:'Address objects',intro:'Built-in objects (like “X1 IP” or “LAN Subnets”) already exist on the new unit, so they are not listed. Make the zones first.'+where('addrs'),
+    tables:[{name:'address-objects',toggles:hideUnused(tipA),rows:[...m.addrs.values()].filter(a=>userMade(a)&&a.type!==8).sort((a,b)=>cmp(a.name,b.name)).map(o=>({id:'addr:'+o.name,o})),cols:[
+      {label:'Name',get:r=>r.o.name,html:r=>aRef(r.o.name)},
+      {label:'Type',get:r=>ADDRTYPE[r.o.type]||r.o.type},
+      {label:'Value',get:r=>aVal(r.o),cls:'mono wrap'},
+      {label:'Zone',get:r=>r.o.zone},
+      {label:'Tip',get:r=>tipA(r.o.name),cls:'wrap'}]}]});
+  const grpRows=(kind,mp)=>groupOrder(mp,kind).filter(userMade).map((o,i)=>({id:(kind==='a'?'addr:':'svc:')+o.name,o,i:i+1}));
+  const memberCol=ref=>({label:'Members',get:r=>r.o.members.map(trT).join(', '),html:r=>r.o.members.map(x=>ref(x)+(tr(x)!==x?` <span class="muted">(new: ${esc(tr(x))})</span>`:'')).join(', '),cls:'wrap'});
+  step({id:'agroups',title:'Address groups',intro:'Make the groups in this order. A group that holds another group comes after it.'+where('addrs'),
+    tables:[{name:'address-groups',toggles:hideUnused(tipA),rows:grpRows('a',m.addrs),cols:[
+      {label:'Order',num:true,get:r=>r.i},
+      {label:'Group',get:r=>r.o.name,html:r=>aRef(r.o.name)},
+      memberCol(x=>aRef(x)),
+      {label:'Tip',get:r=>tipA(r.o.name),cls:'wrap'}]}]});
+  const sProto=s=>PROTO[s.proto]||'IP protocol '+s.proto,sPorts=s=>isTU(s)?(s.p1===s.p2?String(s.p1):s.p1+'–'+s.p2):s.proto===1?'type '+s.p1:'';
+  step({id:'svcs',title:'Service objects',intro:'Built-in services (like HTTP or HTTPS) already exist on the new unit, so they are not listed.'+where('svcs'),
+    tables:[{name:'service-objects',toggles:hideUnused(tipS),rows:[...m.svcs.values()].filter(s=>userMade(s)&&s.type!==2).sort((a,b)=>cmp(a.name,b.name)).map(o=>({id:'svc:'+o.name,o})),cols:[
+      {label:'Name',get:r=>r.o.name,html:r=>sRef(r.o.name)},
+      {label:'Protocol',get:r=>sProto(r.o)},
+      {label:'Ports',get:r=>sPorts(r.o),cls:'mono'},
+      {label:'Tip',get:r=>tipS(r.o.name),cls:'wrap'}]}]});
+  step({id:'sgroups',title:'Service groups',intro:'Make the groups in this order. A group that holds another group comes after it.'+where('svcs'),
+    tables:[{name:'service-groups',toggles:hideUnused(tipS),rows:grpRows('s',m.svcs),cols:[
+      {label:'Order',num:true,get:r=>r.i},
+      {label:'Group',get:r=>r.o.name,html:r=>sRef(r.o.name)},
+      memberCol(x=>sRef(x)),
+      {label:'Tip',get:r=>tipS(r.o.name),cls:'wrap'}]}]});
+
+  /* 10 */
+  const userRules=m.rules.filter(r=>!r.auto);
+  const scheds=[...new Set(userRules.map(r=>r.sched).filter(Boolean))];
+  if(scheds.length)step({id:'scheds',title:'Schedules',intro:'Rules use these schedules. Copy the days and times from the old unit. Some may already exist.'+where('sched'),
+    tables:[{name:'schedules',rows:scheds.map(s=>({id:'sched:'+s,s})),cols:[
+      {label:'Schedule',get:r=>r.s},
+      {label:'Used by rules',get:r=>userRules.filter(x=>x.sched===r.s).map(x=>'#'+x.n).join(', '),cls:'wrap'}]}]});
+
+  /* 11 */
+  if(m.routes.length)step({id:'routes',title:'Routes',intro:'Lower metric wins. Names that start with a port name follow your port plan.'+where('routes'),
+    tables:[{name:'routes',rows:m.routes.map(r=>({id:'route:'+r.n,r})),cols:[
+      {label:'#',num:true,get:x=>x.r.n},
+      {label:'Name',get:x=>x.r.name},
+      {label:'Source',get:x=>trT(x.r.src)||'Any',html:x=>nmA(x.r.src)},
+      {label:'Destination',get:x=>trT(x.r.dst)||'Any',html:x=>nmA(x.r.dst)},
+      {label:'Service',get:x=>trT(x.r.svc)||'Any',html:x=>nmS(x.r.svc)},
+      {label:'Gateway',get:x=>trT(x.r.gw),html:x=>x.r.gw?nmA(x.r.gw):'—'},
+      {label:'Port',get:x=>nw(x.r.iface)},
+      {label:'Metric',num:true,get:x=>x.r.metric}]}]});
+
+  /* 12 */
+  if(m.dhcp.length)step({id:'dhcp',title:'DHCP server',intro:'Scopes that are off on the old unit are greyed out. Skip them if nobody needs them.'+where('dhcp'),
+    tables:[{name:'dhcp',rows:m.dhcp.map(d=>({id:'dhcp:'+d.start,d})),rowClass:r=>r.d.active?'':'off',cols:[
+      {label:'On',get:r=>r.d.active?'on':'off',html:r=>onOff(r.d.active)},
+      {label:'Port',get:r=>nw(r.d.iface)||'—'},
+      {label:'Pool start',get:r=>r.d.start,cls:'mono',sort:r=>r.d.sn},
+      {label:'Pool end',get:r=>r.d.end,cls:'mono',sort:r=>r.d.en},
+      {label:'Gateway',get:r=>r.d.router,cls:'mono'},
+      {label:'Mask',get:r=>r.d.mask,cls:'mono'},
+      {label:'DNS',get:r=>r.d.dns.join(', '),cls:'mono'},
+      {label:'Lease (min)',num:true,get:r=>r.d.lease},
+      {label:'Domain',get:r=>r.d.domain}]}]});
+
+  /* 13 */
+  if(m.users.length||m.ugroups.length)step({id:'users',title:'Users and groups',intro:'Passwords cannot be copied. Give each user a new password. Built-in groups (like Everyone or Trusted Users) already exist. Only add their members.'+where('users'),
+    tables:[{title:'Local users',name:'users',rows:m.users.map(u=>({id:'user:'+u.name,u})),cols:[
+      {label:'User',get:r=>r.u.name},{label:'Groups',get:r=>r.u.memberOf.join(', '),cls:'wrap'},{label:'Comment',get:r=>r.u.comment}]},
+      {title:'User groups',name:'user-groups',rows:m.ugroups.map(g=>({id:'ugrp:'+g.name,g})),cols:[
+      {label:'Group',get:r=>r.g.name},{label:'Members',get:r=>r.g.members.join(', '),cls:'wrap'},{label:'Comment',get:r=>r.g.comment}]}]});
+
+  /* 14 */
+  const userNat=m.nat.filter(x=>!x.auto);
+  if(userNat.length)step({id:'nat',title:'NAT policies',intro:'Only NAT policies made by hand are listed. The new unit makes its own auto-added policies. Keep this order. A port forward also needs an allow rule (next step).'+where('nat'),
+    tables:[{name:'nat',rows:userNat.map(x=>({id:'nat:'+x.n,x})),rowClass:r=>r.x.enabled?'':'off',cols:[
+      {label:'#',num:true,get:r=>r.x.n},
+      {label:'On',get:r=>r.x.enabled?'on':'off',html:r=>onOff(r.x.enabled)},
+      {label:'Original source',get:r=>trT(r.x.origSrc)||'Any',html:r=>nmA(r.x.origSrc)},
+      {label:'Original destination',get:r=>trT(r.x.origDst)||'Any',html:r=>nmA(r.x.origDst)},
+      {label:'Original service',get:r=>trT(r.x.origSvc)||'Any',html:r=>nmS(r.x.origSvc)},
+      {label:'Translated source',get:r=>trT(r.x.transSrc)||'Original',html:r=>r.x.transSrc?nmA(r.x.transSrc):'<span class="any">Original</span>'},
+      {label:'Translated destination',get:r=>trT(r.x.transDst)||'Original',html:r=>r.x.transDst?nmA(r.x.transDst):'<span class="any">Original</span>'},
+      {label:'Translated service',get:r=>trT(r.x.transSvc)||'Original',html:r=>r.x.transSvc?nmS(r.x.transSvc):'<span class="any">Original</span>'},
+      {label:'In port',get:r=>nw(r.x.inIf)||'Any'},
+      {label:'Out port',get:r=>nw(r.x.outIf)||'Any'},
+      {label:'Reflexive',get:r=>r.x.reflexive?'yes':''},
+      {label:'Comment',get:r=>r.x.comment,cls:'wrap'}]}]});
+
+  /* 15 */
+  const probs=new Map();for(const p of ruleProblems())if(p.rule&&!probs.has(p.rule.n))probs.set(p.rule.n,p);
+  const ruleTip=r=>{
+    const p=probs.get(r.n);if(!p)return '';
+    if(p.kind==='Duplicate rule'||p.kind==='Never used (same result)')return 'You can skip it. '+p.why;
+    if(p.kind==='Turned off')return 'Off on the old unit. Skip it if nobody needs it.';
+    if(p.sev==='High')return 'Risky. '+p.why;
+    return 'Check it. '+p.why;
+  };
+  const pairN=new Map(),order=new Map();
+  for(const r of userRules){const k=r.from+'\u0001'+r.to;pairN.set(k,(pairN.get(k)||0)+1);order.set(r.n,pairN.get(k));}
+  if(userRules.length)step({id:'rules',title:'Firewall rules',intro:'Only rules made by hand are listed. The firewall checks rules from the top down inside each zone pair (for example LAN → WAN). After you add them, check that the order on the new unit matches the Order column. The Tip column comes from the Rule problems tab.'+where('rules'),
+    tables:[{name:'rules',rows:[...userRules].sort((a,b)=>cmp(a.from,b.from)||cmp(a.to,b.to)||a.n-b.n).map(r=>({id:'rule:'+r.n,r})),rowClass:x=>x.r.enabled?'':'off',
+      toggles:[{label:'Hide rules you can skip',on:false,test:x=>!/^(You can skip|Off on the old)/.test(ruleTip(x.r))}],cols:[
+      {label:'Zones',get:x=>x.r.from+' → '+x.r.to,sort:x=>x.r.from+' '+x.r.to+' '+String(order.get(x.r.n)).padStart(5,'0')},
+      {label:'Order',num:true,get:x=>order.get(x.r.n)},
+      {label:'Old #',num:true,get:x=>x.r.n},
+      {label:'Action',get:x=>x.r.action,html:x=>actBadge(x.r.action)},
+      {label:'Source',get:x=>trT(x.r.src)||'Any',html:x=>nmA(x.r.src)},
+      {label:'Destination',get:x=>trT(x.r.dst)||'Any',html:x=>nmA(x.r.dst)},
+      {label:'Service',get:x=>trT(x.r.svc)||'Any',html:x=>nmS(x.r.svc)},
+      {label:'Schedule',get:x=>x.r.sched},
+      {label:'On',get:x=>x.r.enabled?'on':'off',html:x=>onOff(x.r.enabled)},
+      {label:'Comment',get:x=>x.r.comment,cls:'wrap'},
+      {label:'Tip',get:x=>ruleTip(x.r),cls:'wrap'}]}]});
+
+  /* 16 */
+  if(s2s.length||gvpn.length)step({id:'vpn',title:'VPN tunnels',intro:'Copy the Phase 1 and Phase 2 settings (encryption, hash, DH group, life time) from the VPN page of the old unit. Get each shared secret from the admin of the other side. If your public IP changes, the other side must change its peer IP too.'+where('vpn'),
+    tables:s2s.length?[{name:'vpn',rows:s2s.map(v=>({id:'vpn:'+v.name,v})),rowClass:r=>r.v.enabled?'':'off',cols:[
+      {label:'On',get:r=>r.v.enabled?'on':'off',html:r=>onOff(r.v.enabled)},
+      {label:'Name',get:r=>r.v.name},
+      {label:'Peer gateway',get:r=>r.v.gw,cls:'mono'},
+      {label:'Backup gateway',get:r=>nz(r.v.gw2)?r.v.gw2:'',cls:'mono'},
+      {label:'Local networks',get:r=>trT(r.v.local),html:r=>r.v.local?nmA(r.v.local):'—'},
+      {label:'Remote networks',get:r=>trT(r.v.remote),html:r=>r.v.remote?nmA(r.v.remote):'—'}]}]:[],
+    list:gvpn.map(v=>['vpn:'+v.name,`Client VPN (<b>${esc(v.name)}</b>) is on. Set it up again and give the users the new settings.`])});
+
+  /* 17 */
+  const extras=KEYSETTINGS.filter(([l,g])=>settingOn(settingVal(m.kv,g))&&!/^DNS/.test(l)).map(([l,g])=>{const v=settingVal(m.kv,g);return ['set:'+l,`<b>${esc(l)}</b>${v==='on'||v==='1'?' is on.':`: <span class="mono">${esc(v)}</span>`}`];});
+  const probes=[];for(let i=0;m.kv.has('NMobjId_'+i);i++)probes.push(m.kv.get('NMobjId_'+i));
+  if(probes.length)extras.push(['extra:probes',`<b>Network monitor probes</b>: ${esc(probes.join(', '))}. They check that each WAN line works. Make them again.`]);
+  if(tsa)extras.push(['extra:tsa',`<b>Terminal Services agents</b>: ${tsa}. Add them again for single sign-on.`]);
+  const wifi=used.filter(f=>m.zoneInfo.find(z=>z.name===f.zone)?.type===4);
+  if(wifi.length)extras.push(['extra:wifi',`<b>Wireless access points</b> are used on ${esc(wifi.map(f=>nw(f.name)).join(', '))}. Check that the new unit and firmware support your access point models.`]);
+  extras.push(['extra:other','Look through the other pages of the old unit: content filter, app rules, DPI-SSL, log and alert settings. SonicView does not read all of them.']);
+  step({id:'extras',title:'Other features in this file',intro:'The old unit uses these features. Set them up on the new unit.',list:extras});
+
+  /* 18 */
+  let check='';
+  if(B){
+    const rows=migrationCheck(m,B,map),c=s=>rows.filter(r=>r.status===s).length;
+    const can=rows.filter(r=>(r.status==='Found'||r.status==='Renamed')&&!done[r.id]).length;
+    check=`<div class="card" style="margin-top:8px"><p style="margin:0 0 8px">New unit’s file: <b>${esc(o.name)}</b> (${esc(B.sys.model)} · ${esc(B.sys.fw)})</p>
+      <p style="margin:0 0 10px"><b>${c('Missing')}</b> missing · <b>${c('Different')+c('Check')}</b> to check · <b>${c('Found')+c('Renamed')}</b> found</p>
+      <div class="mapbar"><button class="btn" type="button" id="gTick"${can?'':' disabled'}>Tick the ${plural(can,'item')} the new unit has</button><a class="btn ghost" href="${H('compare')}" id="gCmp" style="text-decoration:none">See the full list</a><button class="btn ghost" type="button" id="gPick">Load a newer file</button></div>
+      ${root._msg?`<p class="ink2" style="margin:10px 0 0">${esc(root._msg)}</p>`:''}</div>`;
+  }else check=`<div class="card" style="margin-top:8px"><div class="mapbar"><button class="btn" type="button" id="gPick">Choose the new unit’s file</button><span class="muted">The file stays on this computer.</span></div></div>`;
+  step({id:'verify',title:'Check your work',intro:'Export the settings of the new unit and load the file here. SonicView finds what the new unit has, and what is still missing.',
+    list:[['verify:export','Export the settings of the new unit (.exp file).'],['verify:load','Load it here and tick what the new unit has.'],['verify:fix','Fix what is missing or different. Then export and load the file again.']],
+    after:check+`<input type="file" id="gFile" accept=".exp,.txt" hidden><p id="gErr" class="err"></p>`});
+
+  /* 19 */
+  const cables=used.filter(f=>!f.parent&&(f.ip||used.some(v=>v.parent===f.name)));
+  const insideZones=[...new Set(used.filter(f=>f.zone&&f.zone!=='WAN'&&f.ip).map(f=>f.zone))];
+  const fwSeen=new Set(),fwds=m.forwards.filter(x=>x.enabled&&x.kind==='Inbound').filter(x=>{const k=x.origDst+'|'+x.origSvc+'|'+x.transDst;if(fwSeen.has(k))return false;fwSeen.add(k);return true;});
+  step({id:'cutover',title:'Change day',intro:'Do these steps in order.',
+    list:[['cut:export','Export the settings of the new unit one last time. Keep the file safe.'],
+      ['cut:off','Turn off the old unit.'],
+      ...cables.map(f=>['cut:cable:'+f.name,`Move the cable from old port <b>${esc(f.name)}</b> to new port <b>${esc(nw(f.name))}</b>${f.zone?` (${esc(f.zone)}${f.comment?' · '+esc(f.comment):''})`:''}.`]),
+      ['cut:modem','If the internet does not work, restart the ISP modem or router on each WAN line. It can remember the hardware (MAC) address of the old unit.'],
+      ...(insideZones.length?[['cut:inet',`Test the internet from each inside zone: ${esc(insideZones.join(', '))}.`]]:[]),
+      ...s2s.filter(v=>v.enabled).map(v=>['cut:vpn:'+v.name,`Check that the VPN tunnel <b>${esc(v.name)}</b> comes up.`]),
+      ...(m.kv.get('SSLVPNServerEnabled')==='on'?[['cut:sslvpn','Test an SSL VPN login from outside.']]:[]),
+      ...(m.dhcp.some(d=>d.active)?[['cut:dhcp','Check that a device gets an IP address from each DHCP scope.']]:[]),
+      ['cut:log','For one day, watch the log for blocked traffic that should be allowed.']],
+    tables:fwds.length?[{title:'Test each port forward from outside',name:'port-forward-tests',rows:fwds.map(x=>({id:'cut:fwd:'+x.n,x})),cols:[
+      {label:'NAT',num:true,get:r=>r.x.n},
+      {label:'Public IP',get:r=>addrValue(r.x.origDst)||'Any',cls:'mono'},
+      {label:'Public ports',get:r=>r.x.pubPorts,cls:'mono wrap'},
+      {label:'Inside host',get:r=>r.x.transDst,html:r=>aRef(r.x.transDst)+ipSub(r.x.transDst)},
+      {label:'Comment',get:r=>r.x.comment,cls:'wrap'}]}]:[]});
+
+  /* 20 */
+  step({id:'rollback',title:'If it goes wrong',list:[
+    ['back:limit','Before you start, agree on a time limit. If the new unit does not work by then, go back.'],
+    ['back:how','To go back: turn off the new unit, move the cables back, turn on the old unit, and restart the ISP modems.'],
+    ['back:keep','Keep the old unit for a few weeks before you wipe it or sell it.']]});
+
+  /* draw */
+  root.innerHTML=`<div class="mapbar noprint" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Migration guide</h2>
+      <div class="mapbar"><label class="tg">New unit runs <select id="gTarget"><option value="7">SonicOS 7</option><option value="6">SonicOS 6.5</option><option value="x">other firmware</option></select></label>
+      <button class="btn ghost" type="button" id="gOpen">Open all</button><button class="btn ghost" type="button" id="gClear">Clear ticks</button><button class="btn" type="button" id="gPrint">Print or save as PDF</button></div></div>
+    <h1 class="printonly">Migration guide</h1>
+    <p class="note">Use this guide when SonicWall’s own tools cannot move your settings to the new unit. You build the new unit by hand, step by step, from this file. Tick each item when it is done. Ticks are saved in this browser. Menu names can move between firmware versions. If a menu path is wrong, use the search box in the SonicOS menu.</p>
+    <div class="card"><dl class="dl"><dt>Old unit</dt><dd>${esc(m.sys.model)} · SonicOS ${esc(m.sys.fw)}${m.sys.serial?' · serial '+esc(m.sys.serial):''}</dd><dt>Settings file</dt><dd>${esc(fileName)}</dd>
+      <dt>New unit</dt><dd>${B?`${esc(B.sys.model)} · SonicOS ${esc(B.sys.fw)} (${esc(o.name)})`:'<span class="muted">No file yet. See the step “Check your work”.</span>'}</dd></dl>
+      <div class="gprog"><div id="gbar"></div></div><div id="gprogt" class="muted"></div></div>`;
+  $('#gTarget',root).value=target;
+  const closed=root._closed||(root._closed=new Set());
+  steps.forEach((s,i)=>{
+    const d=document.createElement('details');d.className='gstep card';d.open=!closed.has(s.id);
+    d.innerHTML=`<summary><span class="gnum">${i+1}</span><span>${esc(s.title)}</span><span class="gcount"></span></summary><div class="gbody">${s.intro?`<p class="note">${s.intro}</p>`:''}${s.list?.length?`<ul class="glist">${s.list.map(([id,h])=>`<li><label>${chk(id)}<span>${h}</span></label></li>`).join('')}</ul>`:''}</div>`;
+    const body=d.querySelector('.gbody');
+    for(const t of s.tables||[]){
+      if(t.title)body.insertAdjacentHTML('beforeend',`<h3>${esc(t.title)}</h3>`);
+      body.appendChild(makeTable({rows:t.rows,rowClass:t.rowClass,name:'migration-'+t.name,toggles:[{label:'Hide done',on:false,test:r=>!done[r.id]},...(t.toggles||[])],cols:[doneCol,...t.cols]}).el);
+    }
+    if(s.after)body.insertAdjacentHTML('beforeend',s.after);
+    d.addEventListener('toggle',()=>{if(d.open)closed.delete(s.id);else closed.add(s.id);});
+    s.ids=[...(s.list||[]).map(x=>x[0]),...(s.tables||[]).flatMap(t=>t.rows.map(r=>r.id))];
+    s.el=d;root.appendChild(d);
+  });
+  function counts(){
+    let all=0,dn=0;
+    for(const s of steps){
+      const n=s.ids.filter(id=>done[id]).length;all+=s.ids.length;dn+=n;
+      s.el.querySelector('.gcount').textContent=s.ids.length?`${n} of ${s.ids.length} done`:'';
+      s.el.classList.toggle('gdone',s.ids.length>0&&n===s.ids.length);
+    }
+    $('#gbar',root).style.width=(all?dn/all*100:0)+'%';
+    $('#gprogt',root).textContent=`${dn} of ${all} items done (${all?Math.floor(dn/all*100):0}%)`;
+  }
+  counts();
+  const redraw=()=>{const y=scrollY;guideView(root);scrollTo(0,y);};
+  root.onchange=e=>{
+    const t=e.target;
+    if(t.classList.contains('gchk')){if(t.checked)done[t.dataset.id]=1;else delete done[t.dataset.id];save();counts();}
+    else if(t.classList.contains('gport')){const p=ifPlan(),v=t.value.trim();if(v)p[t.dataset.old]=v;else delete p[t.dataset.old];setIfPlan(p);redraw();}
+    else if(t.id==='gTarget'){store('guideTarget',t.value);redraw();}
+    else if(t.id==='gFile'){
+      const f=t.files[0];t.value='';if(!f)return;
+      f.text().then(x=>{setOther(x,f.name);root._msg='';}).catch(x=>{$('#gErr',root).textContent=x.message;});
+    }
+  };
+  root.onclick=e=>{
+    const id=e.target.id;
+    if(id==='gPick')$('#gFile',root).click();
+    else if(id==='gTick'){
+      let n=0;for(const r of migrationCheck(m,B,map))if((r.status==='Found'||r.status==='Renamed')&&!done[r.id]){done[r.id]=1;n++;}
+      save();root._msg=`Ticked ${plural(n,'item')} that the new unit has.`;redraw();
+    }
+    else if(id==='gCmp'){store('cmpMode','missing');const c=built.compare,s=c&&$('#cmpMode',c);if(s&&s.value!=='missing'){s.value='missing';c._otherChanged();}}
+    else if(id==='gOpen'){closed.clear();root.querySelectorAll('details.gstep').forEach(d=>d.open=true);}
+    else if(id==='gClear'){if(confirm('Clear every tick in this guide?')){done={};save();redraw();}}
+    else if(id==='gPrint'){
+      root.querySelectorAll('details.gstep').forEach(d=>d.open=true);
+      const de=document.documentElement,prev=de.dataset.theme;
+      de.dataset.theme='light';
+      const back=()=>{if(prev)de.dataset.theme=prev;else delete de.dataset.theme;removeEventListener('afterprint',back);};
+      addEventListener('afterprint',back);
+      print();
+    }
+  };
+  root._otherChanged=redraw;
+}
+
+/* ---------- views ---------- */
+const TABS=[
+  ['overview','Overview'],['netmap','Network map'],['portmap','Port map'],['problems','Rule problems'],['unused','Unused objects'],['ipmap','IP map'],['forwards','Port forwards'],['nat','NAT policies'],['rules','Firewall rules'],
+  ['addresses','Address objects'],['services','Service objects'],['interfaces','Interfaces'],['routes','Routes'],['dhcp','DHCP'],
+  ['vpn','VPN'],['users','Users'],['compare','Compare'],['migrate','Migration guide'],['report','Report'],['raw','All settings'],['search','Search']
+];
+const built={};let current='overview',lastQuery='';
+function tabCount(id){
+  const m=M;
+  if(id==='problems')return mainProblems().length;
+  if(id==='unused'){const u=unusedObjects();return u.addrs.filter(userMade).length+u.svcs.filter(userMade).length;}
+  return {forwards:m.forwards.filter(x=>x.enabled&&x.kind==='Inbound').length,nat:m.nat.length,rules:m.rules.length,addresses:m.addrs.size,
+    services:m.svcs.size,interfaces:m.ifaces.filter(f=>f.ip).length,routes:m.routes.length,dhcp:m.dhcp.length,vpn:m.vpn.length,users:m.users.length}[id];
+}
+function renderTabs(){
+  const nav=$('#tabs');nav.hidden=false;
+  nav.innerHTML=TABS.filter(([id])=>id!=='search'||built.search).map(([id,l])=>{const c=tabCount(id);return `<a role="tab" href="${id==='search'?H('search',lastQuery):H(id)}" aria-selected="${id===current}">${esc(l)}${c!=null?`<span class="n">${c}</span>`:''}</a>`;}).join('');
+}
+function show(id,hl){
+  current=hl||id;
+  const host=$('#views');
+  for(const v of host.children)v.hidden=v.dataset.view!==id;
+  if(!built[id]){const d=document.createElement('div');d.dataset.view=id;host.appendChild(d);built[id]=d;VIEWS[id](d);}
+  built[id].hidden=false;
+  renderTabs();
+  $('#tabs [aria-selected="true"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+
+const VIEWS={
+overview(root){
+  const m=M;
+  const wan=m.ifaces.filter(f=>f.zone==='WAN'&&f.ip);
+  const inside=m.ifaces.filter(f=>f.zone&&f.zone!=='WAN'&&f.ip);
+  const pubSubs=m.subnets.filter(s=>s.zone==='WAN');
+  const pubFree=pubSubs.reduce((a,s)=>a+s.counts.free,0);
+  const fwdOn=m.forwards.filter(x=>x.enabled&&x.kind==='Inbound').length;
+  const userNat=m.nat.filter(x=>!x.auto).length,userRules=m.rules.filter(x=>!x.auto).length;
+  const tiles=[
+    ['ipmap',pubFree,'Free public IPs',`in ${plural(pubSubs.length,'WAN subnet')}`],
+    ['forwards',fwdOn,'Port forwards on',`${m.forwards.length} inbound NAT total`],
+    ...(g=>[['portmap',g.ports.length,'Open ports from internet',`${g.ports.filter(p=>p.risky).length} risky`]])(portGraph(m.forwards.filter(x=>x.enabled&&x.kind==='Inbound'))),
+    ['interfaces',m.ifaces.filter(f=>f.ip).length,'Interfaces in use',`${m.zones.length} zones`],
+    ['rules',m.rules.length,'Firewall rules',`${userRules} made by hand`],
+    ['nat',m.nat.length,'NAT policies',`${userNat} made by hand`],
+    ['addresses',m.addrs.size,'Address objects',''],
+    ['services',m.svcs.size,'Service objects',''],
+    ['routes',m.routes.length,'Routes',''],
+    ['vpn',m.vpn.filter(v=>v.enabled).length,'VPN tunnels on',`${m.vpn.length} total`],
+    ['dhcp',m.dhcp.filter(d=>d.active).length,'DHCP scopes on',`${m.dhcp.length} total`],
+  ];
+  const zoneOrder=[...new Set(inside.map(f=>f.zone))];
+  const wanNode=f=>{
+    const s=m.subnets.find(x=>x.ifaces.includes(f));
+    const fw=m.forwards.filter(x=>x.enabled&&x.pub.some(r=>s&&r[0]>=s.net&&r[0]<=s.bc)).length;
+    return `<a class="node" href="${H('ipmap',s?s.key:'')}"><div class="nm">${esc(f.name)}${f.comment?` <span class="cm">· ${esc(f.comment)}</span>`:''}</div>
+      <div class="ip">${esc(f.ip)}/${f.cidr}</div><div class="kv">Gateway ${esc(f.gw||'—')}</div>
+      ${s?`<div class="kv">Public IPs: ${s.counts.iface+s.counts.used} used · <b>${s.counts.free} free</b></div>`:''}<div class="kv">${plural(fw,'port forward')} on</div></a>`;
+  };
+  const inNode=f=>{
+    const d=m.dhcp.filter(x=>x.iface===f.name&&x.active);
+    return `<a class="node" href="${H('ipmap',f.net!=null?n2ip(f.net)+'/'+f.cidr:'')}"><div class="nm">${esc(f.name)}${f.vlan?` <span class="kv">VLAN ${f.vlan}</span>`:''}</div>
+      ${f.comment?`<div class="cm">${esc(f.comment)}</div>`:''}<div class="ip">${esc(f.ip)}/${f.cidr}</div>
+      ${d.map(x=>`<div class="kv">DHCP ${esc(x.start)} – ${esc(x.end)}</div>`).join('')}</a>`;
+  };
+  const vpnOn=m.vpn.filter(v=>v.enabled&&nz(v.gw));
+  root.innerHTML=`
+    <div class="sysline"><span>Model <b>${esc(m.sys.model)}</b></span><span>Firmware <b>${esc(m.sys.fw)}</b></span><span>Serial <b>${esc(m.sys.serial)}</b></span>${m.sys.dns.length?`<span>DNS <b>${esc(m.sys.dns.join(', '))}</b></span>`:''}<span>File <b>${esc(fileName)}</b></span></div>
+    <div class="tiles">${tiles.map(([t,v,l,s])=>`<a class="tile" href="${H(t)}"><div class="v">${v}</div><div class="l">${esc(l)}</div><div class="s">${esc(s)}</div></a>`).join('')}</div>
+    <h2>Network at a glance</h2>
+    <p class="note">Click a box to see its IP addresses. For the full picture, open the <a href="${H('netmap')}">Network map</a> or the <a href="${H('portmap')}">Port map</a>.</p>
+    <div class="card"><div class="diagram">
+      <div class="cloud">Internet</div><div class="dg-link"></div>
+      <div class="dg-row">${wan.map(wanNode).join('')||'<span class="muted">No WAN interface found</span>'}</div>
+      <div class="dg-link"></div>
+      <div class="fwbox">${esc(m.sys.model)}<small>SonicOS ${esc(m.sys.fw)}</small></div>
+      <div class="dg-link"></div>
+      <div class="dg-row">${zoneOrder.map(z=>`<div class="zonecol"><div class="zt">${esc(z)}</div>${inside.filter(f=>f.zone===z).map(inNode).join('')}</div>`).join('')}
+      ${vpnOn.length?`<div class="zonecol"><div class="zt">Site-to-site VPN</div>${vpnOn.map(v=>`<a class="node" href="${H('vpn')}"><div class="nm">${esc(v.name)}</div><div class="ip">${esc(v.gw)}</div><div class="kv">${esc(v.remote||'')}</div></a>`).join('')}</div>`:''}</div>
+    </div></div>`;
+},
+
+ipmap(root){
+  const m=M;
+  root.innerHTML=`<h2>Public IPs (WAN)</h2>
+    <p class="note"><b>Free</b> means no part of this settings file uses that IP. Check it with your ISP before you use it.</p>
+    <div class="grid2" id="pubs"></div>
+    <h2>All subnets</h2>
+    <p class="note">Pick a subnet. Hover a square to see who uses that IP. Click a square to search for it.</p>
+    <div class="chips" id="subchips"></div>
+    <div id="subpanel" style="margin-top:14px"></div>`;
+  /* public tables */
+  $('#pubs',root).innerHTML=m.subnets.filter(s=>s.zone==='WAN').map(s=>{
+    const f=s.ifaces[0];const rows=[];
+    for(let n=s.net+(s.size>2?1:0);n<=s.bc-(s.size>2?1:0);n++){
+      const st=ipStatus(n,s);const cl=m.claims.get(n)||[];
+      const badge=st==='free'?'<span class="badge b-allow">Free</span>':st==='iface'?'<span class="badge b-plain" style="color:var(--s1)">Firewall</span>':'<span class="badge b-warn">In use</span>';
+      const fwSeen=new Set();const fw=m.forwards.filter(x=>x.enabled&&x.pub.some(r=>n>=r[0]&&n<=r[1])).filter(x=>{const k=x.pubPorts+'|'+x.transDst+'|'+x.inPorts;if(fwSeen.has(k))return false;fwSeen.add(k);return true;});
+      const fwHtml=fw.slice(0,8).map(x=>`<div><span class="mono">${esc(x.pubPorts.length>40?x.pubPorts.slice(0,40)+' …':x.pubPorts)}</span> <span class="arrow">→</span> ${aRef(x.transDst)}${x.inPorts!=='same'?` <span class="mono muted">${esc(x.inPorts.length>30?x.inPorts.slice(0,30)+' …':x.inPorts)}</span>`:''}</div>`).join('')+(fw.length>8?`<div class="muted">+${fw.length-8} more</div>`:'');
+      const what=claimLines(cl.filter(c=>c.kind!=='nat'),4).map(esc).join('<br>');
+      const natN=cl.filter(c=>c.kind==='nat').length;
+      rows.push(`<tr><td class="mono"><a class="ref" href="${H('search',n2ip(n))}">${n2ip(n)}</a></td><td>${badge}</td><td>${what||'<span class="muted">—</span>'}${natN?`<span class="sub">${plural(natN,'NAT policy')}</span>`:''}</td><td>${fwHtml||'<span class="muted">—</span>'}</td></tr>`);
+    }
+    return `<div class="tblwrap"><div class="tbar"><b>${esc(f.name)}</b><span class="ink2">${esc(f.comment)}</span><span class="tcount mono">${n2ip(s.net)}/${s.cidr} · <b>${s.counts.free} free</b></span></div>
+      <div class="tscroll"><table class="pubtbl"><thead><tr><th>IP</th><th>Status</th><th>What it is</th><th>Port forwards (on)</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+  }).join('')||'<p class="muted">No WAN subnet found.</p>';
+  /* chips */
+  let sel=(m.subnets.find(s=>s.zone!=='WAN')||m.subnets[0])?.key;
+  const chips=$('#subchips',root),panel=$('#subpanel',root);
+  function drawChips(){
+    chips.innerHTML=m.subnets.map(s=>{const f=s.ifaces[0];return `<button class="chip" data-k="${esc(s.key)}" aria-pressed="${s.key===sel}"><b>${esc(s.ifaces.map(x=>x.name).join(', '))}</b> <span class="c">${esc(s.zone)}</span><span class="mono">${n2ip(s.net)}/${s.cidr}</span><span class="c">${s.counts.free.toLocaleString()} free · ${(s.counts.iface+s.counts.used).toLocaleString()} used${f.comment?' · '+esc(f.comment):''}</span></button>`;}).join('');
+  }
+  chips.addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;go(H('ipmap',b.dataset.k));});
+  root._select=k=>{if(!m.subnets.some(s=>s.key===k))return false;if(k!==sel){sel=k;drawChips();drawPanel();}chips.scrollIntoView();return true;};
+  function drawPanel(){
+    const s=m.subnets.find(x=>x.key===sel);if(!s){panel.innerHTML='';return;}
+    const c=s.counts;
+    const blocks=s.size>256?s.size/256:1;
+    let blk=0;
+    const ifn=s.ifaces[0].ipn;if(blocks>1&&ifn!=null)blk=Math.floor((ifn-s.net)/256);
+    const usedRows=[];
+    for(let n=s.net;n<=s.bc;n++){const cl=m.claims.get(n);if(cl&&ipStatus(n,s)!=='free')usedRows.push({n,ip:n2ip(n),st:ipStatus(n,s),uses:claimLines(cl,10).join(' · ')});}
+    panel.innerHTML=`<div class="card">
+      <h3>${esc(s.ifaces.map(x=>x.name).join(', '))} · <span class="mono">${n2ip(s.net)}/${s.cidr}</span> <span class="muted">(${s.zone})</span></h3>
+      <div class="ink2">${s.size.toLocaleString()} addresses · <b>${c.free.toLocaleString()} free</b> · ${c.iface} firewall · ${c.used.toLocaleString()} used in config · ${c.dhcp.toLocaleString()} in active DHCP pool</div>
+      <div class="legend">${['iface','used','dhcp','free','res'].map(k=>`<span><i class="sw st-${k}"></i>${STLABEL[k]}</span>`).join('')}</div>
+      ${blocks>1?`<div class="ink2" style="font-size:13px">This subnet is big. Pick a /24 block (darker = more IPs used):</div><div class="blocks" id="blocks"></div>`:''}
+      <div id="gridhost"></div>
+    </div>
+    <h3 style="margin-top:16px">Used IPs in this subnet</h3><div id="usedtbl"></div>
+    <h3 style="margin-top:16px">Free IP ranges (${s.free.length.toLocaleString()})</h3>
+    <div class="card"><ul class="freelist">${s.free.slice(0,400).map(r=>`<li>${rangeText(r)}${r[1]>r[0]?` <span class="muted">(${(r[1]-r[0]+1).toLocaleString()})</span>`:''}</li>`).join('')}</ul>${s.free.length>400?'<p class="muted">First 400 ranges shown.</p>':''}</div>`;
+    const t=makeTable({cols:[
+      {label:'IP',get:r=>r.ip,sort:r=>r.n,html:r=>`<a class="ref mono" href="${H('search',r.ip)}">${r.ip}</a>`},
+      {label:'Status',get:r=>STLABEL[r.st],html:r=>`<span style="display:inline-flex;gap:6px;align-items:center"><i class="sw st-${r.st}"></i>${esc(STLABEL[r.st])}</span>`},
+      {label:'Used by',get:r=>r.uses,cls:'wrap'}],rows:usedRows,placeholder:'Filter used IPs…'});
+    $('#usedtbl',panel).appendChild(t.el);
+    function drawGrid(){
+      const start=s.net+blk*256,len=Math.min(256,s.size),cols=Math.min(16,len);
+      let h=`<div class="ipgrid" style="--cols:${cols}">`;
+      for(let i=0;i<len;i++){
+        const n=start+i;
+        if(i%cols===0)h+=`<div class="rl">.${(n&255)}</div>`;
+        h+=`<div class="cell st-${ipStatus(n,s)}" data-ip="${n}" data-q="${n2ip(n)}"></div>`;
+      }
+      $('#gridhost',panel).innerHTML=`<div class="mono ink2" style="margin:4px 0 8px">${n2ip(start)} – ${n2ip(start+len-1)}</div>`+h+'</div>';
+      if(blocks>1)drawBlocks();
+    }
+    function drawBlocks(){
+      const host=$('#blocks',panel);let h='';
+      for(let b=0;b<blocks;b++){
+        let u=0;const st=s.net+b*256;
+        for(let n=st;n<st+256;n++){const x=ipStatus(n,s);if(x!=='free'&&x!=='res')u++;}
+        const q=u===0?' e':' q'+Math.min(6,1+Math.floor(Math.log2(u+1)*0.75));
+        h+=`<div class="blk${q}${b===blk?' sel':''}" data-b="${b}" data-tip="${esc(n2ip(st)+'/24\n'+u+' used · '+(256-u)+' free or reserved')}"></div>`;
+      }
+      host.innerHTML=h;
+    }
+    if(blocks>1)panel.querySelector('#blocks').addEventListener('click',e=>{const b=e.target.closest('.blk');if(!b)return;blk=+b.dataset.b;drawGrid();});
+    drawGrid();
+  }
+  drawChips();drawPanel();
+},
+
+forwards(root){
+  root.appendChild(section('Port forwards','These are NAT policies that send traffic to an inside host. <b>Public</b> is what the internet hits. <b>Inside</b> is where it goes. <b>Allow rule</b> shows if a firewall rule lets the traffic in.'));
+  const t=makeTable({rows:M.forwards,toggles:[{label:'Only enabled',on:true,test:r=>r.enabled},{label:'Only from internet',on:true,test:r=>r.kind==='Inbound'}],
+    rowClass:r=>r.enabled?'':'off',cols:[
+    {label:'#',num:true,get:r=>r.n},
+    {label:'On',get:r=>r.enabled?'on':'off',html:r=>onOff(r.enabled)},
+    {label:'Public IP',get:r=>r.origDst+' '+addrValue(r.origDst),html:r=>aRef(r.origDst)+ipSub(r.origDst),sort:r=>r.pub[0]?.[0]??0},
+    {label:'Public port',get:r=>r.pubPorts+' '+r.origSvc,html:r=>sRef(r.origSvc)+svcSub(r.origSvc)},
+    {label:'',get:()=>'',html:()=>'<span class="arrow">→</span>'},
+    {label:'Inside host',get:r=>r.transDst+' '+addrValue(r.transDst),html:r=>aRef(r.transDst)+ipSub(r.transDst),sort:r=>r.inside[0]?.[0]??0},
+    {label:'Inside port',get:r=>r.inPorts+' '+r.transSvc,html:r=>r.transSvc?sRef(r.transSvc)+svcSub(r.transSvc):`<span class="any">${r.origSvc?'Same':'Any'}</span>`},
+    {label:'From',get:r=>(r.origSrc||'Any')+' '+(r.inIf||''),html:r=>aRef(r.origSrc)+(r.inIf?`<span class="sub">via ${esc(r.inIf)}</span>`:'')},
+    {label:'Allow rule',get:r=>r.allow.length?'yes':'no',html:r=>r.allow.length?`<span class="badge b-allow" data-tip="${esc(r.allow.map(x=>'#'+x.n+' '+x.from+'→'+x.to+' '+(x.svc||'Any')).join('\n'))}">Yes (${r.allow.length})</span>`:'<span class="badge b-warn">None found</span>'},
+    {label:'Comment',get:r=>r.comment,cls:'wrap'}]});
+  root.appendChild(t.el);
+},
+
+nat(root){
+  root.appendChild(section('NAT policies','All NAT policies in order. "Original" means the value does not change.'));
+  const t=makeTable({rows:M.nat,toggles:[{label:'Hide auto-added',on:true,test:r=>!r.auto},{label:'Only enabled',on:false,test:r=>r.enabled}],
+    rowClass:r=>r.enabled?'':'off',cols:[
+    {label:'#',num:true,get:r=>r.n},
+    {label:'On',get:r=>r.enabled?'on':'off',html:r=>onOff(r.enabled)},
+    {label:'Orig. source',get:r=>r.origSrc,html:r=>aRef(r.origSrc)},
+    {label:'Trans. source',get:r=>r.transSrc,html:r=>aRef(r.transSrc,'Original')},
+    {label:'Orig. destination',get:r=>r.origDst,html:r=>aRef(r.origDst)+ipSub(r.origDst)},
+    {label:'Trans. destination',get:r=>r.transDst,html:r=>aRef(r.transDst,'Original')+ipSub(r.transDst)},
+    {label:'Orig. service',get:r=>r.origSvc,html:r=>sRef(r.origSvc)},
+    {label:'Trans. service',get:r=>r.transSvc,html:r=>sRef(r.transSvc,'Original')},
+    {label:'In',get:r=>r.inIf||'Any'},{label:'Out',get:r=>r.outIf||'Any'},
+    {label:'Comment',get:r=>r.comment,cls:'wrap'}]});
+  root.appendChild(t.el);
+},
+
+rules(root){
+  const m=M;
+  root.appendChild(section('Firewall rules','The grid counts rules for each zone pair (from row zone to column zone). Click a square to filter the table.'));
+  const wrap=document.createElement('div');wrap.className='split';
+  wrap.innerHTML=`<div class="card"><label class="tg"><input type="checkbox" id="mxauto"> Count auto-added rules</label><div class="matrix" id="mx" style="margin-top:8px"></div><p class="muted" style="font-size:12px;margin:8px 0 0">Darker = more rules. <a href="#" id="mxclear">Clear zone filter</a></p></div><div id="rt"></div>`;
+  root.appendChild(wrap);
+  const t=makeTable({rows:m.rules,toggles:[{label:'Hide auto-added',on:true,test:r=>!r.auto},{label:'Only enabled',on:false,test:r=>r.enabled}],
+    rowClass:r=>r.enabled?'':'off',cols:[
+    {label:'#',num:true,get:r=>r.n},
+    {label:'On',get:r=>r.enabled?'on':'off',html:r=>onOff(r.enabled)},
+    {label:'Action',get:r=>r.action,html:r=>actBadge(r.action)},
+    {label:'From zone',get:r=>r.from},{label:'To zone',get:r=>r.to},
+    {label:'Source',get:r=>r.src,html:r=>aRef(r.src)},
+    {label:'Destination',get:r=>r.dst,html:r=>aRef(r.dst)+ipSub(r.dst)},
+    {label:'Service',get:r=>r.svc,html:r=>sRef(r.svc)},
+    {label:'Schedule',get:r=>r.sched||'Always'},
+    {label:'Comment',get:r=>r.comment,cls:'wrap'}]});
+  $('#rt',wrap).appendChild(t.el);
+  let selPair=null;
+  const zs=[...new Set([...m.zones,...m.rules.flatMap(r=>[r.from,r.to])])].filter(Boolean);
+  function draw(){
+    const auto=$('#mxauto',wrap).checked;
+    const cnt=new Map();let max=0;
+    for(const r of m.rules){if(!auto&&r.auto)continue;const k=r.from+'\u0001'+r.to;const v=(cnt.get(k)||0)+1;cnt.set(k,v);max=Math.max(max,v);}
+    const used=zs.filter(z=>[...cnt.keys()].some(k=>k.split('\u0001').includes(z)));
+    const step=v=>v?Math.max(1,Math.ceil(v/max*6)):0;
+    $('#mx',wrap).innerHTML=`<table><tr><th></th>${used.map(z=>`<th class="col">${esc(z)}</th>`).join('')}</tr>${used.map(a=>`<tr><th class="row">${esc(a)}</th>${used.map(b=>{const v=cnt.get(a+'\u0001'+b)||0;const k=a+'\u0001'+b;return `<td><div class="mc ${v?'q'+step(v):'z'}${selPair===k?' sel':''}" data-k="${esc(k)}" data-tip="${esc(a+' → '+b+'\n'+plural(v,'rule'))}">${v||''}</div></td>`;}).join('')}</tr>`).join('')}</table>`;
+  }
+  $('#mxauto',wrap).addEventListener('change',draw);
+  $('#mx',wrap).addEventListener('click',e=>{const c=e.target.closest('.mc:not(.z)');if(!c)return;selPair=c.dataset.k;const [a,b]=selPair.split('\u0001');t.setExt(r=>r.from===a&&r.to===b);draw();});
+  $('#mxclear',wrap).addEventListener('click',e=>{e.preventDefault();selPair=null;t.setExt(null);draw();});
+  draw();
+},
+
+addresses(root){
+  root.appendChild(section('Address objects','Hosts, ranges, networks and groups. Hover a name to see its IPs.'));
+  const rows=[...M.addrs.values()];
+  const t=makeTable({rows,toggles:[{label:'Hide built-in',on:false,test:r=>r.props!=='793'&&r.props!=='797'&&r.props!=='1073742617'}],cols:[
+    {label:'Name',get:r=>r.name,html:r=>aRef(r.name)},
+    {label:'Type',get:r=>ADDRTYPE[r.type]||r.type},
+    {label:'Value',get:r=>addrValue(r.name),cls:'mono wrap',sort:r=>addrRanges(r.name)[0]?.[0]??-1},
+    {label:'Zone',get:r=>r.zone},
+    {label:'Member of',get:r=>r.memberOf.join(', '),html:r=>r.memberOf.map(g=>aRef(g)).join(', '),cls:'wrap'}]});
+  root.appendChild(t.el);
+},
+
+services(root){
+  root.appendChild(section('Service objects','Ports and protocols. Groups show all the ports inside them.'));
+  const rows=[...M.svcs.values()];
+  const t=makeTable({rows,cols:[
+    {label:'Name',get:r=>r.name,html:r=>sRef(r.name)},
+    {label:'Type',get:r=>r.type===2?'Group':'Service'},
+    {label:'Protocol / ports',get:r=>svcValue(r.name),cls:'mono wrap',sort:r=>r.type===2?99999:r.p1},
+    {label:'Member of',get:r=>r.memberOf.join(', '),html:r=>r.memberOf.map(g=>sRef(g)).join(', '),cls:'wrap'}]});
+  root.appendChild(t.el);
+},
+
+interfaces(root){
+  root.appendChild(section('Interfaces','Physical ports and VLANs.'));
+  const t=makeTable({rows:M.ifaces,toggles:[{label:'Hide unused',on:true,test:r=>!!r.ip||!!r.zone}],rowClass:r=>r.ip?'':'off',cols:[
+    {label:'Name',get:r=>r.name},
+    {label:'Zone',get:r=>r.zone||'—'},
+    {label:'IP address',get:r=>r.ip?r.ip+'/'+r.cidr:'',cls:'mono',sort:r=>r.ipn??-1},
+    {label:'Subnet',get:r=>r.net!=null?n2ip(r.net)+'/'+r.cidr:'',cls:'mono'},
+    {label:'Gateway',get:r=>r.gw,cls:'mono'},
+    {label:'VLAN',num:true,get:r=>r.vlan||''},
+    {label:'Mode',get:r=>r.mode},
+    {label:'Management',get:r=>r.mgmt.join(', ').toUpperCase()},
+    {label:'MTU',num:true,get:r=>r.mtu},
+    {label:'Comment',get:r=>r.comment,cls:'wrap'}]});
+  root.appendChild(t.el);
+},
+
+routes(root){
+  root.appendChild(section('Routes','Policy-based routes. Lower metric wins.'));
+  const t=makeTable({rows:M.routes,cols:[
+    {label:'#',num:true,get:r=>r.n},
+    {label:'Name',get:r=>r.name},
+    {label:'Source',get:r=>r.src,html:r=>aRef(r.src)},
+    {label:'Destination',get:r=>r.dst,html:r=>aRef(r.dst)},
+    {label:'Service',get:r=>r.svc,html:r=>sRef(r.svc)},
+    {label:'Gateway',get:r=>r.gw,html:r=>aRef(r.gw,'—')+ipSub(r.gw)},
+    {label:'Interface',get:r=>r.iface},
+    {label:'Metric',num:true,get:r=>r.metric}]});
+  root.appendChild(t.el);
+},
+
+dhcp(root){
+  root.appendChild(section('DHCP server scopes','IP pools the firewall hands out.'));
+  const t=makeTable({rows:M.dhcp,rowClass:r=>r.active?'':'off',cols:[
+    {label:'On',get:r=>r.active?'on':'off',html:r=>onOff(r.active)},
+    {label:'Interface',get:r=>r.iface||'—'},
+    {label:'Pool start',get:r=>r.start,cls:'mono',sort:r=>r.sn},
+    {label:'Pool end',get:r=>r.end,cls:'mono',sort:r=>r.en},
+    {label:'Size',num:true,get:r=>r.sn!=null&&r.en!=null?r.en-r.sn+1:''},
+    {label:'Gateway',get:r=>r.router,cls:'mono'},
+    {label:'Mask',get:r=>r.mask,cls:'mono'},
+    {label:'DNS',get:r=>r.dns.join(', '),cls:'mono'},
+    {label:'Lease (min)',num:true,get:r=>r.lease},
+    {label:'Domain',get:r=>r.domain}]});
+  root.appendChild(t.el);
+},
+
+vpn(root){
+  root.appendChild(section('IPsec VPN policies','Keys and passwords are not shown.'));
+  const t=makeTable({rows:M.vpn,rowClass:r=>r.enabled?'':'off',cols:[
+    {label:'On',get:r=>r.enabled?'on':'off',html:r=>onOff(r.enabled)},
+    {label:'Name',get:r=>r.name},
+    {label:'Peer gateway',get:r=>nz(r.gw)?r.gw:'',cls:'mono'},
+    {label:'Backup gateway',get:r=>nz(r.gw2)?r.gw2:'',cls:'mono'},
+    {label:'Local networks',get:r=>r.local,html:r=>aRef(r.local,'—')+ipSub(r.local)},
+    {label:'Remote networks',get:r=>r.remote,html:r=>aRef(r.remote,'—')+ipSub(r.remote)}]});
+  root.appendChild(t.el);
+},
+
+users(root){
+  root.appendChild(section('Local users','Passwords are not shown.'));
+  root.appendChild(makeTable({rows:M.users,cols:[{label:'User',get:r=>r.name},{label:'Groups',get:r=>r.memberOf.join(', ')},{label:'Comment',get:r=>r.comment}]}).el);
+  root.appendChild(section('User groups'));
+  root.appendChild(makeTable({rows:M.ugroups,cols:[{label:'Group',get:r=>r.name},{label:'Members',get:r=>r.members.join(', '),cls:'wrap'},{label:'Comment',get:r=>r.comment}]}).el);
+},
+
+raw(root){
+  root.appendChild(section('All settings','Every raw setting in the file. Values that look like passwords or keys are hidden.'));
+  const rows=[...M.kv.entries()].map(([k,v])=>({k,v:SECRET.test(k)&&v?'•••• hidden':(v.length>200?`(long value, ${v.length} characters)`:v)}));
+  root.appendChild(makeTable({rows,placeholder:'Type part of a setting name or value…',cols:[{label:'Setting',get:r=>r.k,cls:'mono'},{label:'Value',get:r=>r.v,cls:'mono wrap'}]}).el);
+},
+
+netmap(root){
+  const m=M;
+  const inside=m.ifaces.filter(f=>f.ip&&f.zone&&f.zone!=='WAN');
+  const zoneOrder=[...new Set(inside.map(f=>f.zone))];
+  const zsel=[...new Set(['WAN',...zoneOrder,'VPN',...m.rules.map(r=>r.from)])].filter(Boolean);
+  root.innerHTML=`<h2>Network map</h2>
+    <p class="note">How each network connects through the firewall. Click a box to see its IP addresses. Pick a zone, or click a blue zone name, to see which zones it may send traffic to.</p>
+    <div class="card mapbar"><label class="tg">Zone: <select id="nmzone"><option value="">None</option>${zsel.map(z=>`<option>${esc(z)}</option>`).join('')}</select></label>
+      <label class="tg"><input type="checkbox" id="nmauto" checked> Count auto-added rules</label></div>
+    <p id="nmreach" class="note" hidden></p>
+    <div class="legend"><span><i class="sw ln plain"></i>Link</span><span><i class="sw ln warn" style="background:repeating-linear-gradient(90deg,var(--axis) 0 5px,transparent 5px 9px)"></i>VPN tunnel</span><span><i class="sw bx src"></i>Picked zone</span><span><i class="sw bx hl"></i>Picked zone may send traffic here</span></div>
+    <div class="card mapwrap"><div class="map" id="nm"></div></div>`;
+  const X={net:0,wan:180,fw:480,in:670,out:1000},WD={net:130,wan:260,fw:130,in:280,out:250};
+  const LH=18,PAD=18,GAP=12;
+  const nodes=[],links=[],heads=[];
+  const L=(text,cls)=>({text:String(text??''),cls});
+  const box=(col,y,lines,o={})=>{const n={id:'n'+nodes.length,col,x:X[col],w:WD[col],y,h:PAD+lines.length*LH,lines,...o};nodes.push(n);return n;};
+  const subOf=f=>m.subnets.find(s=>s.ifaces.includes(f));
+  /* left: WAN links, then VPN */
+  let y=0;const wanN=[],vpnN=[];
+  for(const f of m.ifaces.filter(f=>f.zone==='WAN'&&f.ip)){
+    const s=subOf(f);
+    const fw=s?m.forwards.filter(x=>x.enabled&&x.kind==='Inbound'&&x.pub.some(r=>r[0]>=s.net&&r[0]<=s.bc)).length:0;
+    const pr=m.routes.filter(r=>r.iface===f.name).length;
+    const ls=[L(f.name+(f.comment?' · '+f.comment:''),'nm'),L(f.ip+'/'+f.cidr,'ip'),L('Gateway '+(f.gw||'—'),'kv')];
+    if(s)ls.push(L(plural(s.counts.free,'free public IP'),'kv'));
+    ls.push(L(plural(fw,'port forward')+' on','kv'));
+    if(pr)ls.push(L(plural(pr,'policy route')+' use this link','kv'));
+    const n=box('wan',y,ls,{zone:'WAN',href:H('ipmap',s?s.key:'')});wanN.push(n);y+=n.h+GAP;
+  }
+  const peers=m.vpn.filter(v=>nz(v.gw)),clients=m.vpn.filter(v=>!nz(v.gw)&&v.enabled);
+  if(peers.length||clients.length){y+=8;heads.push({x:X.wan,y,text:'VPN'});y+=24;}
+  for(const v of peers){
+    const ls=[L(v.name,'nm'),L('Peer '+v.gw,'ip')];
+    if(v.remote)ls.push(L('Remote: '+addrValue(v.remote),'kv'));
+    if(!v.enabled)ls.push(L('Turned off','kv'));
+    const n=box('wan',y,ls,{zone:'VPN',href:H('vpn'),off:!v.enabled,dash:true});vpnN.push(n);y+=n.h+GAP;
+  }
+  if(clients.length){const n=box('wan',y,[L('Remote users (client VPN)','nm'),L(clients.map(v=>v.name).join(', '),'kv')],{zone:'VPN',href:H('vpn'),dash:true});vpnN.push(n);y+=n.h+GAP;}
+  const leftEnd=y;
+  /* right: inside networks by zone */
+  y=0;const inN=[];
+  for(const z of zoneOrder){
+    heads.push({x:X.in,y,text:z,zone:z});y+=24;
+    for(const f of inside.filter(f=>f.zone===z)){
+      const s=subOf(f),d=m.dhcp.filter(x=>x.iface===f.name&&x.active);
+      const ls=[L(f.name+(f.vlan?' · VLAN '+f.vlan:''),'nm')];
+      if(f.comment)ls.push(L(f.comment,'cm'));
+      ls.push(L(f.net!=null?n2ip(f.net)+'/'+f.cidr:f.ip,'ip'));
+      if(s)ls.push(L(`${(s.counts.iface+s.counts.used).toLocaleString()} used · ${s.counts.free.toLocaleString()} free`,'kv'));
+      for(const x of d)ls.push(L('DHCP '+x.start+' – '+x.end,'kv'));
+      const n=box('in',y,ls,{zone:z,href:H('ipmap',s?s.key:''),f});inN.push(n);y+=n.h+GAP;
+    }
+    y+=8;
+  }
+  const inEnd=y;
+  /* far right: networks reached through a router on an inside network */
+  let oy=0;const outN=[];
+  for(const p of inN){
+    const seen=new Set();
+    for(const r of m.routes.filter(r=>r.iface===p.f.name&&r.dst)){
+      const k=r.dst+'|'+r.gw;if(seen.has(k))continue;seen.add(k);
+      const n=box('out',Math.max(oy,p.y),[L(r.dst,'nm'),L(addrValue(r.dst),'ip'),L('via '+(r.gw?addrValue(r.gw):'—'),'kv')],
+        {zone:p.zone,href:m.addrs.has(r.dst)?H('addr',r.dst):H('search',r.dst),parent:p,tip:'Route: '+r.name});
+      outN.push(n);oy=n.y+n.h+GAP;
+    }
+  }
+  const Ht=Math.max(leftEnd,inEnd,oy,160)-GAP;
+  const W=outN.length?X.out+WD.out:X.in+WD.in;
+  const wy0=wanN.length?wanN[0].y:0,wy1=wanN.length?wanN[wanN.length-1].y+wanN[wanN.length-1].h:Ht;
+  const cloud={id:'cloud',x:X.net,w:WD.net,h:42,y:Math.max(0,(wy0+wy1)/2-21),zone:'WAN'};
+  const fwb={x:X.fw,w:WD.fw,y:0,h:Ht};
+  const cy=n=>n.y+n.h/2;
+  for(const n of wanN)links.push({a:cloud.id,b:n.id,x1:cloud.x+cloud.w,y1:cy(cloud),x2:n.x,y2:cy(n)},{a:n.id,b:'fw',x1:n.x+n.w,y1:cy(n),x2:fwb.x,y2:cy(n)});
+  for(const n of vpnN)links.push({a:cloud.id,b:n.id,dash:true,x1:cloud.x+cloud.w,y1:cy(cloud),x2:n.x,y2:cy(n)},{a:n.id,b:'fw',dash:true,x1:n.x+n.w,y1:cy(n),x2:fwb.x,y2:cy(n)});
+  for(const n of inN)links.push({a:'fw',b:n.id,x1:fwb.x+fwb.w,y1:cy(n),x2:n.x,y2:cy(n)});
+  for(const n of outN)links.push({a:n.parent.id,b:n.id,x1:n.parent.x+n.parent.w,y1:cy(n.parent),x2:n.x,y2:cy(n)});
+  const path=l=>{const dx=Math.max(24,(l.x2-l.x1)/2);return `<path class="lk${l.dash?' dash':''}" data-a="${l.a}" data-b="${l.b}" d="M${l.x1} ${l.y1}C${l.x1+dx} ${l.y1},${l.x2-dx} ${l.y2},${l.x2} ${l.y2}"/>`;};
+  const pos=n=>`left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px`;
+  const map=$('#nm',root);
+  map.style.width=W+'px';map.style.height=Ht+'px';
+  map.innerHTML=`<svg width="${W}" height="${Ht}" aria-hidden="true">${links.map(path).join('')}</svg>`+
+    `<div class="cloudn" data-id="${cloud.id}" data-zone="WAN" style="${pos(cloud)}">Internet</div>`+
+    `<div class="fwbar" style="${pos(fwb)}">${esc(m.sys.model)}<small>SonicOS ${esc(m.sys.fw)}</small><small>${plural(m.rules.length,'rule')} · ${m.nat.length} NAT</small></div>`+
+    heads.map(h=>h.zone?`<button type="button" class="zh" data-pick="${esc(h.zone)}" style="left:${h.x}px;top:${h.y}px" title="Show what ${esc(h.zone)} can reach">${esc(h.text)}</button>`:`<div class="zh" style="left:${h.x}px;top:${h.y}px">${esc(h.text)}</div>`).join('')+
+    nodes.map(n=>`<a class="node${n.off?' off':''}${n.dash?' vpnn':''}" data-id="${n.id}" data-zone="${esc(n.zone)}" href="${n.href}" style="${pos(n)}" data-tip="${esc((n.tip?n.tip+'\n':'')+n.lines.map(l=>l.text).join('\n'))}">${n.lines.map(l=>`<div class="${l.cls}">${esc(l.text)}</div>`).join('')}</a>`).join('');
+  const sel=$('#nmzone',root),auto=$('#nmauto',root),note=$('#nmreach',root);
+  function paint(){
+    const z=sel.value;
+    map.querySelectorAll('.pill').forEach(p=>p.remove());
+    map.querySelectorAll('[data-id]').forEach(el=>el.classList.remove('src','hl','dim'));
+    map.querySelectorAll('.lk').forEach(l=>l.classList.remove('dim'));
+    if(!z){note.hidden=true;return;}
+    const c=new Map();
+    for(const r of m.rules)if(r.enabled&&r.action==='Allow'&&r.from===z&&(auto.checked||!r.auto))c.set(r.to,(c.get(r.to)||0)+1);
+    const dim=new Set();
+    map.querySelectorAll('[data-id]').forEach(el=>{
+      const zz=el.dataset.zone,n=c.get(zz);
+      if(zz===z)el.classList.add('src');else if(n)el.classList.add('hl');else{el.classList.add('dim');dim.add(el.dataset.id);}
+      if(n&&el.classList.contains('node'))el.insertAdjacentHTML('beforeend',`<span class="pill">${plural(n,'rule')}</span>`);
+    });
+    map.querySelectorAll('.lk').forEach(l=>{if(dim.has(l.dataset.a)||dim.has(l.dataset.b))l.classList.add('dim');});
+    const list=[...c].sort((a,b)=>b[1]-a[1]);
+    note.innerHTML=list.length?`<b>${esc(z)}</b> may send traffic to: ${list.map(([t,n])=>`<b>${esc(t)}</b> (${plural(n,'rule')})`).join(', ')}.<br>A rule can allow only some hosts or ports. Open <a href="${H('rules')}">Firewall rules</a> for the detail.`:`No enabled allow rule starts in zone <b>${esc(z)}</b>.`;
+    note.hidden=false;
+  }
+  sel.addEventListener('change',paint);auto.addEventListener('change',paint);
+  map.addEventListener('click',e=>{const b=e.target.closest('[data-pick]');if(!b)return;sel.value=sel.value===b.dataset.pick?'':b.dataset.pick;paint();});
+},
+
+portmap(root){
+  const m=M;
+  root.innerHTML=`<h2>Port map</h2>
+    <p class="note">Which ports the internet can reach, and where each one goes inside. <b>Left:</b> public IP. <b>Middle:</b> port. <b>Right:</b> inside host. A <b>red</b> port is risky when anyone on the internet can reach it. Click a box to show only its paths. Click it again to show all.</p>
+    <div class="tiles" id="pmtiles"></div>
+    <div class="card mapbar" style="margin-top:12px"><label class="tg"><input type="checkbox" id="pmon" checked> Only enabled</label><label class="tg"><input type="checkbox" id="pmin" checked> Only from internet</label>
+      <span class="legend" style="margin:0"><span><i class="sw ln ok"></i>Allow rule found</span><span><i class="sw ln warn"></i>No allow rule found (likely blocked)</span><span><i class="sw bx"></i>Risky port open to anyone</span></span>
+      <a href="#" id="pmclear" hidden>Show all paths</a></div>
+    <div class="card mapwrap" style="margin-top:12px"><div class="map" id="pm"></div></div>
+    <h3 style="margin-top:16px">Paths</h3><div id="pmtbl"></div>`;
+  let sel=null,G=null;
+  const t=makeTable({rows:m.forwards,rowClass:r=>r.enabled?'':'off',placeholder:'Filter paths…',cols:[
+    {label:'#',num:true,get:r=>r.n},
+    {label:'On',get:r=>r.enabled?'on':'off',html:r=>onOff(r.enabled)},
+    {label:'Public IP',get:r=>r.origDst+' '+addrValue(r.origDst),html:r=>aRef(r.origDst)+ipSub(r.origDst),sort:r=>r.pub[0]?.[0]??0},
+    {label:'Public port',get:r=>r.pubPorts+' '+r.origSvc,html:r=>sRef(r.origSvc)+svcSub(r.origSvc)},
+    {label:'',get:()=>'',html:()=>'<span class="arrow">→</span>'},
+    {label:'Inside host',get:r=>r.transDst+' '+addrValue(r.transDst),html:r=>aRef(r.transDst)+ipSub(r.transDst),sort:r=>r.inside[0]?.[0]??0},
+    {label:'Inside port',get:r=>r.inPorts+' '+r.transSvc,html:r=>r.transSvc?sRef(r.transSvc)+svcSub(r.transSvc):`<span class="any">${r.origSvc?'Same':'Any'}</span>`},
+    {label:'From',get:r=>r.origSrc||'Anyone',html:r=>aRef(r.origSrc,'Anyone')},
+    {label:'Allow rule',get:r=>r.allow.length?'yes':'no',html:r=>r.allow.length?`<span class="badge b-allow" data-tip="${esc(r.allow.map(x=>'#'+x.n+' '+x.from+'→'+x.to+' '+(x.svc||'Any')).join('\n'))}">Yes (${r.allow.length})</span>`:'<span class="badge b-warn">None found</span>'},
+    {label:'Risk',get:r=>portRisk(r).join(', '),html:r=>{const k=portRisk(r);return k.length?`<span class="badge b-deny">${esc(k.join(', '))}</span>`:'';}},
+    {label:'Comment',get:r=>r.comment,cls:'wrap'}]});
+  $('#pmtbl',root).appendChild(t.el);
+  const pick=()=>m.forwards.filter(x=>(!$('#pmon',root).checked||x.enabled)&&(!$('#pmin',root).checked||x.kind==='Inbound'));
+  const map=$('#pm',root);
+  function draw(){
+    const flows=pick();G=portGraph(flows);
+    if(sel&&!G.byKey.has(sel))sel=null;
+    const C={l:{x:0,w:230},m:{x:360,w:210},r:{x:700,w:250}},RH=46,NH=38,TOP=26;
+    const cols={l:G.pubs,m:G.ports,r:G.hosts};
+    const Ht=TOP+Math.max(1,...Object.values(cols).map(a=>a.length))*RH;
+    for(const [c,arr] of Object.entries(cols)){const off=TOP+(Ht-TOP-arr.length*RH)/2;arr.forEach((n,i)=>{n.x=C[c].x;n.w=C[c].w;n.y=off+i*RH;n.h=NH;});}
+    const W=C.r.x+C.r.w;
+    const cy=n=>n.y+n.h/2;
+    const path=e=>{const a=G.byKey.get(e.a),b=G.byKey.get(e.b),x1=a.x+a.w,x2=b.x,dx=(x2-x1)/2;
+      return `<path class="lk ${e.ok?'ok':'warn'}" data-f="${e.flows.join(' ')}" d="M${x1} ${cy(a)}C${x1+dx} ${cy(a)},${x2-dx} ${cy(b)},${x2} ${cy(b)}"/>`;};
+    map.style.width=W+'px';map.style.height=Ht+'px';
+    map.innerHTML=flows.length?`<svg width="${W}" height="${Ht}" aria-hidden="true">${G.edges.map(path).join('')}</svg>`+
+      `<div class="colh" style="left:${C.l.x}px">Public IP (${G.pubs.length})</div><div class="colh" style="left:${C.m.x}px">Port (${G.ports.length})</div><div class="colh" style="left:${C.r.x}px">Inside host (${G.hosts.length})</div>`+
+      [...G.pubs,...G.ports,...G.hosts].map(n=>`<button type="button" class="pnode${n.risky?' risky':''}" data-k="${esc(n.key)}" style="left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px" data-tip="${esc(n.tip)}"><div class="t">${esc(n.label)}</div><div class="u">${esc(n.sub||plural(n.flows.size,'path'))}</div></button>`).join('')
+      :'<p class="muted">No port forwards match these choices.</p>';
+    const pubIps=new Set(flows.flatMap(f=>f.pub.map(r=>r[0])));
+    const tiles=[[G.ports.length,'Open ports',`${plural(flows.length,'port forward')}`],[pubIps.size,'Public IPs used',''],[G.hosts.length,'Inside hosts reached',''],
+      [G.ports.filter(p=>p.risky).length,'Risky ports open to anyone','RDP, SMB, SQL, Telnet and similar'],[flows.filter(f=>!f.allow.length).length,'Paths with no allow rule','Likely blocked, or rule is missing']];
+    $('#pmtiles',root).innerHTML=tiles.map(([v,l,s])=>`<div class="tile" style="cursor:default"><div class="v">${v}</div><div class="l">${esc(l)}</div><div class="s">${esc(s)}</div></div>`).join('');
+    paint();
+  }
+  function paint(){
+    const on=sel?G.byKey.get(sel).flows:null;
+    map.querySelectorAll('.pnode').forEach(b=>{const n=G.byKey.get(b.dataset.k);b.classList.toggle('sel',b.dataset.k===sel);b.classList.toggle('dim',!!on&&![...n.flows].some(i=>on.has(i)));});
+    map.querySelectorAll('.lk').forEach(p=>p.classList.toggle('dim',!!on&&!p.dataset.f.split(' ').some(i=>on.has(+i))));
+    $('#pmclear',root).hidden=!sel;
+    const vis=new Set(pick().map(f=>f.n));
+    t.setExt(r=>vis.has(r.n)&&(!on||on.has(r.n)));
+  }
+  map.addEventListener('click',e=>{const b=e.target.closest('.pnode');if(!b)return;sel=sel===b.dataset.k?null:b.dataset.k;paint();});
+  $('#pmclear',root).addEventListener('click',e=>{e.preventDefault();sel=null;paint();});
+  $('#pmon',root).addEventListener('change',draw);$('#pmin',root).addEventListener('change',draw);
+  draw();
+},
+
+problems(root){
+  const ps=ruleProblems();
+  root.appendChild(section('Rule problems','Rules that look wrong or risky. SonicView checks rules in the order they are in the file. It does not see live traffic, so check each item before you change the firewall.'));
+  const shown=mainProblems();
+  const tiles=document.createElement('div');tiles.className='tiles';tiles.style.marginBottom='12px';
+  tiles.innerHTML=[['High','Fix these first'],['Medium','Check these soon'],['Low','Clean up when you can']].map(([s,l])=>`<div class="tile" style="cursor:default"><div class="v">${shown.filter(p=>p.sev===s).length}</div><div class="l">${sevBadge(s)}</div><div class="s">${l}</div></div>`).join('')+
+    `<a class="tile" href="${H('report')}"><div class="v">PDF</div><div class="l">Make a report</div><div class="s">Print or save as PDF</div></a>`;
+  root.appendChild(tiles);
+  const it=p=>p.rule||p.nat;
+  const t=makeTable({rows:ps,name:'rule-problems',rowClass:p=>p.sev==='Info'?'off':'',
+    toggles:[{label:'Hide info',on:true,test:p=>p.sev!=='Info'},{label:'Hide auto-added rules',on:true,test:p=>!p.rule?.auto}],cols:[
+    {label:'Severity',get:p=>p.sev,sort:p=>SEVRANK[p.sev],html:p=>sevBadge(p.sev)},
+    {label:'Problem',get:p=>p.kind},
+    {label:'Item',get:p=>p.rule?'Rule #'+p.rule.n:'NAT #'+p.nat.n,sort:p=>it(p).n},
+    {label:'Zones',get:p=>p.rule?p.rule.from+' → '+p.rule.to:'From '+(p.nat.inIf||'any')},
+    {label:'Source',get:p=>(p.rule?p.rule.src:p.nat.origSrc)||'Any',html:p=>aRef(p.rule?p.rule.src:p.nat.origSrc)},
+    {label:'Destination',get:p=>p.rule?p.rule.dst||'Any':p.nat.origDst+' → '+p.nat.transDst,
+      html:p=>p.rule?aRef(p.rule.dst)+ipSub(p.rule.dst):aRef(p.nat.origDst)+' <span class="arrow">→</span> '+aRef(p.nat.transDst)+ipSub(p.nat.transDst)},
+    {label:'Service',get:p=>(p.rule?p.rule.svc:p.nat.origSvc)||'Any',html:p=>sRef(p.rule?p.rule.svc:p.nat.origSvc)},
+    {label:'Action',get:p=>p.rule?.action||'',html:p=>p.rule?actBadge(p.rule.action):''},
+    {label:'Why',get:p=>p.why,cls:'wrap'},
+    {label:'Comment',get:p=>it(p).comment,cls:'wrap'}]});
+  root.appendChild(t.el);
+},
+
+unused(root){
+  const u=unusedObjects();
+  root.appendChild(section('Unused objects','Nothing else in the settings file names these objects. That means no rule, NAT policy, route, VPN, group in use, or other setting. You can likely delete them. Built-in objects are hidden at first.'));
+  root.appendChild(section('Address objects'));
+  root.appendChild(makeTable({rows:u.addrs,name:'unused-address-objects',toggles:[{label:'Hide built-in',on:true,test:userMade}],cols:[
+    {label:'Name',get:r=>r.name,html:r=>aRef(r.name)},
+    {label:'Type',get:r=>ADDRTYPE[r.type]||r.type},
+    {label:'Value',get:r=>addrValue(r.name),cls:'mono wrap',sort:r=>addrRanges(r.name)[0]?.[0]??-1},
+    {label:'Zone',get:r=>r.zone},
+    {label:'In unused groups',get:r=>r.memberOf.join(', '),html:r=>r.memberOf.map(g=>aRef(g)).join(', '),cls:'wrap'}]}).el);
+  root.appendChild(section('Service objects'));
+  root.appendChild(makeTable({rows:u.svcs,name:'unused-service-objects',toggles:[{label:'Hide built-in',on:true,test:userMade}],cols:[
+    {label:'Name',get:r=>r.name,html:r=>sRef(r.name)},
+    {label:'Type',get:r=>r.type===2?'Group':'Service'},
+    {label:'Protocol / ports',get:r=>svcValue(r.name),cls:'mono wrap'},
+    {label:'In unused groups',get:r=>r.memberOf.join(', '),html:r=>r.memberOf.map(g=>sRef(g)).join(', '),cls:'wrap'}]}).el);
+},
+
+compare(root){
+  root.innerHTML=`<h2>Compare two files</h2>
+    <div class="card mapbar">
+      <label class="tg">Show <select id="cmpMode"><option value="missing">what is missing on a new firewall</option><option value="changes">what changed on the same firewall</option></select></label>
+      <button class="btn" type="button" id="cmpBtn">Choose the other file</button>
+      <label class="tg" id="cmpDirWrap">The other file is <select id="cmpDir"><option value="older">older</option><option value="newer">newer</option></select> than the open file</label>
+      <input type="file" id="cmpFile" accept=".exp,.txt" hidden></div>
+    <p class="note" id="cmpHelp"></p>
+    <p id="cmpErr" class="err"></p><div id="cmpOut"></div>`;
+  const out=$('#cmpOut',root),err=$('#cmpErr',root),dir=$('#cmpDir',root),mode=$('#cmpMode',root);
+  mode.value=load('cmpMode')==='changes'?'changes':'missing';
+  /* clickable area tiles above a table */
+  function areaTable(t){
+    let pick=null;
+    out.querySelector('.tiles').addEventListener('click',e=>{
+      const b=e.target.closest('[data-a]');if(!b)return;
+      pick=pick===b.dataset.a?null:b.dataset.a;
+      out.querySelectorAll('.tile').forEach(x=>x.classList.toggle('on',x.dataset.a===pick));
+      t.setExt(pick?r=>r.area===pick:null);
+    });
+  }
+  const tiles=(rows,sub)=>`<div class="tiles">${[...new Set(rows.map(r=>r.area))].map(a=>{const l=rows.filter(r=>r.area===a);return sub(a,l);}).join('')}</div><div id="cmpTbl" style="margin-top:12px"></div>`;
+  function drawChanges(o){
+    const older=dir.value==='older';
+    const [A,B]=older?[snapshot(o.model),snapshot(M)]:[snapshot(M),snapshot(o.model)];
+    const [an,bn]=older?[o.name,fileName]:[fileName,o.name];
+    const rows=diffModels(A,B);
+    out.innerHTML=`<p class="ink2">From <b>${esc(an)}</b> (older) to <b>${esc(bn)}</b> (newer): <b>${plural(rows.length,'change')}</b>. Click a box to show only that part.</p>`+
+      (rows.length?tiles(rows,(a,l)=>`<button type="button" class="tile" data-a="${esc(a)}"><div class="v">${l.length}</div><div class="l">${esc(a)}</div><div class="s">${['Added','Removed','Changed'].map(c=>l.filter(r=>r.change===c).length+' '+c.toLowerCase()).join(' · ')}</div></button>`):'<p class="note">The two files have the same settings.</p>');
+    if(!rows.length)return;
+    const t=makeTable({rows,name:'changes',cols:[
+      {label:'Area',get:r=>r.area},
+      {label:'Change',get:r=>r.change,html:r=>`<span class="badge ${r.change==='Added'?'b-allow':r.change==='Removed'?'b-deny':'b-warn'}">${r.change}</span>`},
+      {label:'Item',get:r=>r.item,cls:'wrap'},
+      {label:'Before',get:r=>r.before,cls:'mono wrap'},
+      {label:'After',get:r=>r.after,cls:'mono wrap'}]});
+    $('#cmpTbl',out).appendChild(t.el);
+    areaTable(t);
+  }
+  function drawMissing(o){
+    const B=o.model;
+    if(!B.addrs.size&&!B.rules.length){out.innerHTML=`<p class="note">SonicView found no address objects or rules in <b>${esc(o.name)}</b>. The new firmware may write its settings file in another format. SonicView can only compare files in the classic SonicOS .exp format.</p>`;return;}
+    const map=ifMap(M,B),rows=migrationCheck(M,B,map);
+    const cnt=(l,s)=>l.filter(r=>r.status===s).length;
+    const moved=M.ifaces.filter(f=>f.ip&&map.get(f.name)!==f.name);
+    out.innerHTML=`<p class="ink2">Old firewall <b>${esc(fileName)}</b> (${esc(M.sys.model)} · ${esc(M.sys.fw)}) → new firewall <b>${esc(o.name)}</b> (${esc(B.sys.model)} · ${esc(B.sys.fw)}): <b>${cnt(rows,'Missing')}</b> missing, <b>${cnt(rows,'Different')}</b> different, <b>${cnt(rows,'Found')+cnt(rows,'Renamed')}</b> found.</p>
+      <p class="note">Ports: ${moved.length?moved.map(f=>`${esc(f.name)} → <b>${esc(map.get(f.name))}</b>`).join(', ')+'. ':'same port names on both units. '}You can change the port plan in the <a href="${H('migrate')}">Migration guide</a>.
+      Only items made by hand are checked. Built-in objects and auto-added rules and NAT policies are left out. Click a box to show only that part.</p>`+
+      tiles(rows,(a,l)=>`<button type="button" class="tile" data-a="${esc(a)}"><div class="v">${cnt(l,'Missing')+cnt(l,'Different')+cnt(l,'Check')}</div><div class="l">${esc(a)}</div><div class="s">${cnt(l,'Missing')} missing · ${cnt(l,'Different')+cnt(l,'Check')} to check · ${cnt(l,'Found')+cnt(l,'Renamed')} found</div></button>`);
+    const t=makeTable({rows,name:'missing-on-new-firewall',toggles:[{label:'Hide items that are found',on:true,test:r=>r.status!=='Found'&&r.status!=='Renamed'}],
+      empty:'Nothing is missing here.',cols:[
+      {label:'Area',get:r=>r.area},
+      {label:'Status',get:r=>r.status,sort:r=>MSTATUS[r.status],html:r=>mBadge(r.status)},
+      {label:'Item',get:r=>r.item,cls:'wrap'},
+      {label:'Old firewall',get:r=>r.old,cls:'mono wrap'},
+      {label:'New firewall',get:r=>r.now,cls:'mono wrap'},
+      {label:'What to do',get:r=>r.todo,cls:'wrap'}]});
+    $('#cmpTbl',out).appendChild(t.el);
+    areaTable(t);
+  }
+  function draw(){
+    const o=otherFile(),miss=mode.value==='missing';
+    $('#cmpDirWrap',root).hidden=miss;
+    $('#cmpHelp',root).innerHTML=miss
+      ?'The open file is the <b>old</b> firewall. Choose a settings file exported from the <b>new</b> firewall. SonicView lists what the new firewall does not have yet. Both files stay on this computer.'
+      :'Choose a second .exp file from this firewall, for example an older backup. SonicView lists what changed. The second file stays on this computer.';
+    $('#cmpBtn',root).textContent=o?'Choose another file':'Choose the other file';
+    if(!o){out.innerHTML='';return;}
+    if(miss)drawMissing(o);else drawChanges(o);
+  }
+  root._otherChanged=draw;
+  $('#cmpBtn',root).addEventListener('click',()=>$('#cmpFile',root).click());
+  $('#cmpFile',root).addEventListener('change',async e=>{
+    const f=e.target.files[0];e.target.value='';if(!f)return;
+    err.textContent='';
+    try{setOther(await f.text(),f.name);}catch(x){err.textContent=x.message;}
+  });
+  dir.addEventListener('change',draw);
+  mode.addEventListener('change',()=>{store('cmpMode',mode.value);draw();});
+  draw();
+},
+
+migrate(root){guideView(root);},
+
+report(root){
+  const m=M,ps=mainProblems().filter(p=>p.sev!=='Low');
+  const risky=m.forwards.filter(f=>f.enabled&&portRisk(f).length);
+  const u=unusedObjects(),ua=u.addrs.filter(userMade),us=u.svcs.filter(userMade);
+  const g=portGraph(m.forwards.filter(x=>x.enabled&&x.kind==='Inbound'));
+  const n=s=>ps.filter(p=>p.sev===s).length;
+  root.innerHTML=`<div class="mapbar noprint" style="justify-content:space-between;margin-bottom:12px"><h2 style="margin:0">Firewall check report</h2><button class="btn" type="button" id="printBtn">Print or save as PDF</button></div>
+    <h1 class="printonly">Firewall check report</h1>
+    <div class="card"><dl class="dl"><dt>Firewall</dt><dd>${esc(m.sys.model)} · SonicOS ${esc(m.sys.fw)}</dd>${m.sys.serial?`<dt>Serial</dt><dd>${esc(m.sys.serial)}</dd>`:''}
+      <dt>Settings file</dt><dd>${esc(fileName)}</dd><dt>Report made</dt><dd id="repDate"></dd></dl></div>
+    <h3 style="margin-top:18px">Summary</h3>
+    <ul class="replist">
+      <li><b>${n('High')}</b> high and <b>${n('Medium')}</b> medium rule problems.</li>
+      <li><b>${risky.length}</b> port forwards open a risky port to anyone on the internet.</li>
+      <li><b>${g.ports.length}</b> ports are open from the internet. They reach <b>${g.hosts.length}</b> inside hosts.</li>
+      <li><b>${ua.length}</b> address objects and <b>${us.length}</b> service objects are not used (built-in objects left out).</li>
+    </ul>
+    <p class="note">SonicView reads the settings file only. It does not see live traffic. Check each item before you change the firewall.</p>
+    ${tbl('Risky ports open to anyone',['NAT','Public IP','Public port','Inside host','Risk','Comment'],risky.map(f=>[`#${f.n}`,aRef(f.origDst)+ipSub(f.origDst),sRef(f.origSvc)+svcSub(f.origSvc),aRef(f.transDst)+ipSub(f.transDst),`<span class="badge b-deny">${esc(portRisk(f).join(', '))}</span>`,esc(f.comment)]))}
+    ${tbl('Rule problems (high and medium)',['Severity','Problem','Item','Zones','Source','Destination','Service','Why'],ps.map(p=>p.rule
+      ?[sevBadge(p.sev),esc(p.kind),'Rule #'+p.rule.n,esc(p.rule.from+' → '+p.rule.to),aRef(p.rule.src),aRef(p.rule.dst)+ipSub(p.rule.dst),sRef(p.rule.svc),esc(p.why)]
+      :[sevBadge(p.sev),esc(p.kind),'NAT #'+p.nat.n,esc(p.nat.inIf||''),aRef(p.nat.origSrc),aRef(p.nat.origDst)+' → '+aRef(p.nat.transDst),sRef(p.nat.origSvc),esc(p.why)]))}
+    ${tbl('Unused address objects',['Name','Type','Value'],ua.map(a=>[aRef(a.name),esc(ADDRTYPE[a.type]||a.type),`<span class="mono">${esc(addrValue(a.name))}</span>`]))}
+    ${tbl('Unused service objects',['Name','Protocol / ports'],us.map(s=>[sRef(s.name),`<span class="mono">${esc(svcValue(s.name))}</span>`]))}`;
+  $('#printBtn',root).addEventListener('click',()=>{
+    $('#repDate',root).textContent=new Date().toLocaleString();
+    /* print on white paper, whatever the screen theme is */
+    const de=document.documentElement,prev=de.dataset.theme;
+    de.dataset.theme='light';
+    const done=()=>{if(prev)de.dataset.theme=prev;else delete de.dataset.theme;removeEventListener('afterprint',done);};
+    addEventListener('afterprint',done);
+    print();
+  });
+  $('#repDate',root).textContent=new Date().toLocaleString();
+},
+
+
+search(root){root.innerHTML='';},
+detail(root){root.innerHTML='';}
+};
+
+/* ---------- shared result tables ---------- */
+const tbl=(title,head,rows)=>rows.length?`<h3>${esc(title)} (${rows.length})</h3><div class="tblwrap"><div class="tscroll"><table><thead><tr>${head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+const natRow=x=>[`#${x.n}`,onOff(x.enabled),aRef(x.origSrc)+' → '+aRef(x.transSrc,'Original'),aRef(x.origDst)+' → '+aRef(x.transDst,'Original'),sRef(x.origSvc)+' → '+sRef(x.transSvc,'Original'),esc(x.comment)];
+const ruleRow=r=>[`#${r.n}`,onOff(r.enabled),actBadge(r.action),esc(r.from+' → '+r.to),aRef(r.src),aRef(r.dst),sRef(r.svc),esc(r.comment)];
+const fwdRow=x=>[`#${x.n}`,onOff(x.enabled),aRef(x.origDst)+ipSub(x.origDst),sRef(x.origSvc)+svcSub(x.origSvc),aRef(x.transDst)+ipSub(x.transDst),x.transSvc?sRef(x.transSvc)+svcSub(x.transSvc):'<span class="any">Same</span>'];
+const natHead=['#','On','Source','Destination','Service','Comment'],ruleHead=['#','On','Action','Zones','Source','Destination','Service','Comment'],fwdHead=['#','On','Public IP','Public port','Inside host','Inside port'];
+
+/* ---------- object pages (each has its own URL) ---------- */
+function parents(map,name){
+  const via=new Map([[name,'Direct']]);const q=[name];
+  while(q.length){const x=q.shift();for(const g of map.get(x)?.memberOf||[])if(!via.has(g)){via.set(g,'Via group '+g);q.push(g);}}
+  return via;
+}
+function howCol(via,names){const n=names.find(x=>via.has(x));return esc(via.get(n)||'');}
+function addrPage(name){
+  const m=M,a=m.addrs.get(name);
+  if(!a)return `<h2>${esc(name)}</h2><p class="note">There is no address object with this name in the loaded file.</p>`;
+  const via=parents(m.addrs,name);
+  const r=addrRanges(name);
+  const lists=[
+    tbl('Port forwards',['How',...fwdHead],m.forwards.filter(x=>[x.origDst,x.transDst,x.origSrc].some(v=>via.has(v))).map(x=>[howCol(via,[x.origDst,x.transDst,x.origSrc]),...fwdRow(x)])),
+    tbl('Firewall rules',['How',...ruleHead],m.rules.filter(x=>via.has(x.src)||via.has(x.dst)).map(x=>[howCol(via,[x.src,x.dst]),...ruleRow(x)])),
+    tbl('NAT policies',['How',...natHead],m.nat.filter(x=>[x.origSrc,x.origDst,x.transSrc,x.transDst].some(v=>via.has(v))).map(x=>[howCol(via,[x.origSrc,x.origDst,x.transSrc,x.transDst]),...natRow(x)])),
+    tbl('Routes',['How','Name','Source','Destination','Gateway'],m.routes.filter(x=>[x.src,x.dst,x.gw].some(v=>via.has(v))).map(x=>[howCol(via,[x.src,x.dst,x.gw]),esc(x.name),aRef(x.src),aRef(x.dst),aRef(x.gw)])),
+    tbl('VPN policies',['How','Name','Local','Remote'],m.vpn.filter(x=>via.has(x.local)||via.has(x.remote)).map(x=>[howCol(via,[x.local,x.remote]),esc(x.name),aRef(x.local),aRef(x.remote)]))];
+  const used=lists.filter(Boolean).join('');
+  const ipLink=n=>`<a class="ref mono" href="${H('search',n2ip(n))}">${n2ip(n)}</a>`;
+  return `<div class="detail"><h2>Address object: ${esc(name)}</h2><div class="card"><dl class="dl">
+    <dt>Type</dt><dd>${esc(ADDRTYPE[a.type]||a.type)}</dd>
+    <dt>Value</dt><dd class="mono">${esc(addrValue(name))}</dd>
+    <dt>Zone</dt><dd>${esc(a.zone||'—')}</dd>
+    ${a.type===8?`<dt>Members</dt><dd>${a.members.map(x=>`<div>${aRef(x)} <span class="mono muted">${esc(M.addrs.get(x)?.type===8?'group':addrValue(x))}</span></div>`).join('')||'—'}</dd>`:''}
+    <dt>Member of</dt><dd>${a.memberOf.map(x=>aRef(x)).join(' ')||'—'}</dd>
+    ${r.length?`<dt>IP addresses</dt><dd>${r.slice(0,60).map(x=>x[0]===x[1]?ipLink(x[0]):`<span class="mono">${rangeText(x)}</span>`).join(', ')}${r.length>60?' …':''}</dd>`:''}
+  </dl></div>${used||'<p class="note">This object is not used by any port forward, rule, NAT policy, route or VPN.</p>'}</div>`;
+}
+function svcPage(name){
+  const m=M,s=m.svcs.get(name);
+  if(!s)return `<h2>${esc(name)}</h2><p class="note">There is no service object with this name in the loaded file.</p>`;
+  const via=parents(m.svcs,name);
+  const lists=[
+    tbl('Port forwards',['How',...fwdHead],m.forwards.filter(x=>via.has(x.origSvc)||via.has(x.transSvc)).map(x=>[howCol(via,[x.origSvc,x.transSvc]),...fwdRow(x)])),
+    tbl('Firewall rules',['How',...ruleHead],m.rules.filter(x=>via.has(x.svc)).map(x=>[howCol(via,[x.svc]),...ruleRow(x)])),
+    tbl('NAT policies',['How',...natHead],m.nat.filter(x=>via.has(x.origSvc)||via.has(x.transSvc)).map(x=>[howCol(via,[x.origSvc,x.transSvc]),...natRow(x)])),
+    tbl('Routes',['How','Name','Source','Destination','Gateway'],m.routes.filter(x=>via.has(x.svc)).map(x=>[howCol(via,[x.svc]),esc(x.name),aRef(x.src),aRef(x.dst),aRef(x.gw)]))];
+  const used=lists.filter(Boolean).join('');
+  return `<div class="detail"><h2>Service object: ${esc(name)}</h2><div class="card"><dl class="dl">
+    <dt>Type</dt><dd>${s.type===2?'Group':'Service'}</dd>
+    <dt>Protocol / ports</dt><dd class="mono">${esc(svcValue(name)||'—')}</dd>
+    ${s.type===2?`<dt>Members</dt><dd>${s.members.map(x=>`<div>${sRef(x)} <span class="mono muted">${esc(svcValue(x))}</span></div>`).join('')||'—'}</dd>`:''}
+    <dt>Member of</dt><dd>${s.memberOf.map(x=>sRef(x)).join(' ')||'—'}</dd>
+  </dl></div>${used||'<p class="note">This service is not used by any port forward, rule, NAT policy or route.</p>'}</div>`;
+}
+function showDetail(kind,name){
+  if(!built.detail){const d=document.createElement('div');d.dataset.view='detail';$('#views').appendChild(d);built.detail=d;}
+  built.detail.innerHTML=kind==='addr'?addrPage(name):svcPage(name);
+  document.title=`${name} · SonicView`;
+  show('detail',kind==='addr'?'addresses':'services');
+}
+
+/* ---------- search ---------- */
+function runSearch(q){
+  q=q.trim();if(!q)return;
+  $('#q').value=q;lastQuery=q;document.title=`${q} · SonicView`;
+  if(!built.search){const d=document.createElement('div');d.dataset.view='search';$('#views').appendChild(d);built.search=d;}
+  const root=built.search;const m=M;const out=[];
+  const n=ip2n(q);
+  let names=new Set(),svcNames=new Set(),title;
+  if(n!=null){
+    title=`IP ${q}`;
+    const subs=m.subnets.filter(s=>n>=s.net&&n<=s.bc);
+    const cl=m.claims.get(n)||[];
+    out.push(`<div class="card"><div style="font-size:18px;font-weight:650" class="mono">${esc(q)}</div>
+      <div class="ink2">${subs.length?subs.map(s=>`In subnet <b class="mono">${n2ip(s.net)}/${s.cidr}</b> on ${esc(s.ifaces.map(f=>f.name).join(', '))} (${esc(s.zone)}) — status: <b>${esc(STLABEL[ipStatus(n,s)])}</b>`).join('<br>'):'Not inside any firewall interface subnet.'}</div>
+      ${cl.length?`<ul>${cl.map(c=>`<li>${esc(c.label)}</li>`).join('')}</ul>`:'<p class="muted">No object, NAT policy or DHCP pool names this exact IP.</p>'}</div>`);
+    for(const a of m.addrs.values())if(addrRanges(a.name).some(r=>n>=r[0]&&n<=r[1]))names.add(a.name);
+    const objs=[...names].map(x=>m.addrs.get(x));
+    out.push(tbl('Address objects that contain this IP',['Name','Type','Value'],objs.map(a=>[aRef(a.name),esc(ADDRTYPE[a.type]),`<span class="mono">${esc(addrValue(a.name))}</span>`])));
+  }else if(/^\d{1,5}$/.test(q)){
+    const p=+q;title=`Port ${p}`;
+    for(const s of m.svcs.values())if(s.type!==2&&(s.proto===6||s.proto===17)&&p>=s.p1&&p<=s.p2)svcNames.add(s.name);
+    let grew=true;while(grew){grew=false;for(const s of m.svcs.values())if(s.type===2&&!svcNames.has(s.name)&&s.members.some(x=>svcNames.has(x))){svcNames.add(s.name);grew=true;}}
+    out.push(tbl('Service objects that include this port',['Name','Ports'],[...svcNames].map(x=>[sRef(x),`<span class="mono">${esc(svcValue(x))}</span>`])));
+    const fw=m.forwards.filter(x=>svcNames.has(x.origSvc)||svcNames.has(x.transSvc));
+    out.push(tbl('Port forwards using this port',fwdHead,fw.map(fwdRow)));
+    out.push(tbl('Firewall rules using this port',ruleHead,m.rules.filter(r=>svcNames.has(r.svc)).map(ruleRow)));
+    out.push(tbl('NAT policies using this port',natHead,m.nat.filter(x=>svcNames.has(x.origSvc)||svcNames.has(x.transSvc)).map(natRow)));
+  }else{
+    title=`“${q}”`;const ql=q.toLowerCase();const has=s=>String(s||'').toLowerCase().includes(ql);
+    for(const a of m.addrs.values())if(has(a.name)||has(addrValue(a.name)))names.add(a.name);
+    for(const s of m.svcs.values())if(has(s.name))svcNames.add(s.name);
+    {const q=[...names];while(q.length){const a=m.addrs.get(q.pop());for(const g of a?.memberOf||[])if(!names.has(g)){names.add(g);q.push(g);}}}
+    {const q=[...svcNames];while(q.length){const a=m.svcs.get(q.pop());for(const g of a?.memberOf||[])if(!svcNames.has(g)){svcNames.add(g);q.push(g);}}}
+    out.push(tbl('Interfaces',['Name','Zone','IP','Comment'],m.ifaces.filter(f=>has(f.name)||has(f.comment)||has(f.zone)).map(f=>[esc(f.name),esc(f.zone),`<span class="mono">${esc(f.ip?f.ip+'/'+f.cidr:'')}</span>`,esc(f.comment)])));
+    out.push(tbl('Address objects',['Name','Type','Value'],[...names].map(x=>m.addrs.get(x)).map(a=>[aRef(a.name),esc(ADDRTYPE[a.type]),`<span class="mono">${esc(addrValue(a.name))}</span>`])));
+    out.push(tbl('Service objects',['Name','Ports'],[...svcNames].map(x=>[sRef(x),`<span class="mono">${esc(svcValue(x))}</span>`])));
+    out.push(tbl('Routes',['Name','Source','Destination','Gateway'],m.routes.filter(r=>has(r.name)||names.has(r.src)||names.has(r.dst)||names.has(r.gw)).map(r=>[esc(r.name),aRef(r.src),aRef(r.dst),aRef(r.gw)])));
+    out.push(tbl('VPN',['Name','Gateway','Remote'],m.vpn.filter(v=>has(v.name)||has(v.gw)||names.has(v.remote)).map(v=>[esc(v.name),esc(v.gw),aRef(v.remote)])));
+  }
+  if(n!=null||!/^\d{1,5}$/.test(q)){
+    /* add groups that contain matched objects */
+    const ql=q.toLowerCase();
+    const natHit=m.nat.filter(x=>[x.origSrc,x.origDst,x.transSrc,x.transDst].some(v=>names.has(v))||[x.origSvc,x.transSvc].some(v=>svcNames.has(v))||(n==null&&x.comment.toLowerCase().includes(ql)));
+    const ruleHit=m.rules.filter(r=>names.has(r.src)||names.has(r.dst)||svcNames.has(r.svc)||(n==null&&r.comment.toLowerCase().includes(ql)));
+    out.push(tbl('NAT policies',natHead,natHit.map(natRow)));
+    out.push(tbl('Firewall rules',ruleHead,ruleHit.map(ruleRow)));
+  }
+  const body=out.filter(Boolean).join('');
+  root.innerHTML=`<div class="sres"><h2>Search: ${esc(title)}</h2>${body||'<p class="muted">Nothing found.</p>'}</div>`;
+  show('search');
+}
+
+/* ---------- loading ---------- */
+let fileName='';
+function showError(msg){const b=$('#errBanner');b.textContent=msg;b.hidden=!msg;}
+function loadText(text,name,save){
+  const err=$('#dropErr');err.textContent='';showError('');
+  try{
+    const kv=parseExp(text);
+    M=buildModel(kv);derive();
+    fileName=name;
+    for(const k of Object.keys(built))delete built[k];
+    $('#views').innerHTML='';
+    $('#drop').hidden=true;
+    $('#q').disabled=false;
+    $('#devname').textContent=`${M.sys.model} · ${M.sys.fw}`;
+    let saved=!save;
+    if(save){store('file',text);store('fileName',name);saved=load('file')===text;}
+    const foot=$('#foot');foot.hidden=false;
+    foot.innerHTML=`Loaded ${esc(name)} · ${kv.size.toLocaleString()} settings · read only in this browser · `+
+      (saved?`saved in this browser so links can open in new tabs · <a href="#" id="forget">Forget saved file</a>`:`<b>could not save the file in this browser, so new tabs will ask for the file again</b>`);
+    route();
+  }catch(e){
+    console.error(e);
+    if(M){showError(e.message);}else{$('#drop').hidden=false;err.textContent=e.message;}
+  }
+}
+async function loadFile(file){loadText(await file.text(),file.name,true);}
+
+/* ---------- routing: the URL always shows the current page ---------- */
+function route(){
+  if(!M)return;
+  const h=location.hash.replace(/^#\/?/,'');
+  const i=h.indexOf('/');
+  const view=i<0?h:h.slice(0,i);
+  let arg=i<0?'':h.slice(i+1);
+  try{arg=decodeURIComponent(arg);}catch(e){}
+  hideTip();
+  if(view==='search'&&arg){runSearch(arg);window.scrollTo(0,0);return;}
+  if((view==='addr'||view==='svc')&&arg){showDetail(view,arg);window.scrollTo(0,0);return;}
+  const id=VIEWS[view]&&view!=='search'&&view!=='detail'?view:'overview';
+  document.title=`SonicView · ${M.sys.model}`;
+  show(id);
+  if(id==='ipmap'&&arg&&built.ipmap._select?.(arg))return;
+  window.scrollTo(0,0);
+}
+addEventListener('hashchange',route);
+
+const pick=()=>$('#file').click();
+$('#openBtn').addEventListener('click',pick);
+$('#dropBtn').addEventListener('click',pick);
+$('#file').addEventListener('change',e=>{const f=e.target.files[0];if(f)loadFile(f);e.target.value='';});
+let dragDepth=0;
+addEventListener('dragenter',e=>{if([...e.dataTransfer.types].includes('Files')){dragDepth++;document.body.classList.add('dragging');}});
+addEventListener('dragleave',()=>{dragDepth=Math.max(0,dragDepth-1);if(!dragDepth)document.body.classList.remove('dragging');});
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();dragDepth=0;document.body.classList.remove('dragging');const f=e.dataTransfer.files[0];if(f)loadFile(f);});
+
+document.addEventListener('click',e=>{
+  if(e.target.id==='forget'){e.preventDefault();try{for(const k of ['file','fileName','other','otherName'])localStorage.removeItem('sonicview.'+k);}catch(_){}location.hash='';location.reload();return;}
+  const c=e.target.closest('.cell[data-q]');
+  if(c&&M)go(H('search',c.dataset.q));
+});
+$('#searchForm').addEventListener('submit',e=>{e.preventDefault();const q=$('#q').value.trim();if(M&&q)go(H('search',q));});
+/* another tab loaded a new file: follow it */
+addEventListener('storage',e=>{if(e.key==='sonicview.file'&&e.newValue)loadText(e.newValue,load('fileName')||'saved file',false);});
+
+/* tooltip */
+const tip=$('#tip');
+function hideTip(){tip.hidden=true;}
+document.addEventListener('mouseover',e=>{
+  const el=e.target.closest('[data-tip],[data-ip]');
+  if(!el){hideTip();return;}
+  let t=el.dataset.tip;
+  if(el.dataset.ip&&M){const n=+el.dataset.ip;const s=M.subnets.find(x=>n>=x.net&&n<=x.bc);t=ipTip(n,s);}
+  if(!t){hideTip();return;}
+  tip.textContent=t;tip.hidden=false;
+});
+document.addEventListener('mousemove',e=>{
+  if(tip.hidden)return;
+  const w=tip.offsetWidth,h=tip.offsetHeight;
+  let x=e.clientX+14,y=e.clientY+14;
+  if(x+w>innerWidth-8)x=e.clientX-w-14;
+  if(y+h>innerHeight-8)y=e.clientY-h-14;
+  tip.style.left=Math.max(8,x)+'px';tip.style.top=Math.max(8,y)+'px';
+});
+addEventListener('scroll',hideTip,{passive:true});
+
+/* theme */
+$('#themeBtn').addEventListener('click',()=>{
+  const dark=getComputedStyle(document.documentElement).colorScheme==='dark';
+  const next=dark?'light':'dark';
+  document.documentElement.dataset.theme=next;store('theme',next);
+});
+{const t=load('theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}
+{const saved=load('file');if(saved)loadText(saved,load('fileName')||'saved file',false);}
+</script>
+</body>
+</html>

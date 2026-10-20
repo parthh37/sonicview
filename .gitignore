@@ -1,0 +1,12 @@
+# Never commit real firewall settings exports. They hold network layout,
+# rules and encrypted credentials.
+*.exp
+
+# Local archives and build output
+*.zip
+_site/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.claude/
