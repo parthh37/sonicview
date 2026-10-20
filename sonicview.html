@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- The browser enforces the privacy promise: the page cannot fetch, load or post anything, and only
+     the inline <script> and <style> below may run (by SHA-256 hash). style="" attributes stay allowed because the
+     maps place their boxes with computed inline positions; style-src is only the fallback for browsers
+     without style-src-elem/-attr. After editing the script or style, run: node tools/update-csp.mjs -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RpIY/vUyTeONoYb4Z78SH7ufdd5Dl6MTmCKr18Qeg88='; style-src 'unsafe-inline'; style-src-elem 'sha256-EWBMv0dn+Rxb0l0twOX5F7PoTYPp59Ckx+cNJpzgGvY='; style-src-attr 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>SonicView Firewall Visualizer</title>
 <style>
 :root{
