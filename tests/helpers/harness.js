@@ -21,11 +21,15 @@ const EXPORTS = [
   'snapshot', 'diffModels', 'migrationCheck', 'csvCell',
 ];
 
-/* every classic inline script, in page order; skips src= and data blocks (JSON, templates) */
+/*
+ * every classic inline script, in page order; skips src= and data blocks (JSON, templates).
+ * One left-to-right scan, so "<script>" mentioned in an HTML comment is not taken for a tag
+ * and "<!--" inside a script is not taken for a comment.
+ */
 function inlineScripts(html) {
   const out = [];
-  for (const [, attrs, body] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
-    if (/\bsrc\s*=/i.test(attrs)) continue;
+  for (const [whole, attrs, body] of html.matchAll(/<!--[\s\S]*?-->|<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    if (whole.startsWith('<!--') || /\bsrc\s*=/i.test(attrs)) continue;
     const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(attrs)?.[1].toLowerCase();
     if (type && !['text/javascript', 'application/javascript'].includes(type)) continue;
     out.push(body);
@@ -68,9 +72,12 @@ function makeSandbox() {
     getElementById: () => stubElement(),
   });
   const sandbox = {
-    console, atob, btoa, setTimeout, clearTimeout, URL, Blob, TextEncoder, TextDecoder,
+    console, atob, btoa, setTimeout, clearTimeout, queueMicrotask, structuredClone,
+    URL, URLSearchParams, Blob, TextEncoder, TextDecoder,
     document,
-    location: { hash: '', href: 'file:///sonicview.html', reload() {} },
+    location: { hash: '', search: '', pathname: '/sonicview.html', href: 'file:///sonicview.html', reload() {} },
+    history: { replaceState() {}, pushState() {} },
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }),
     localStorage: memoryStorage(),
     navigator: { userAgent: 'node' },
     innerWidth: 1280, innerHeight: 800,
