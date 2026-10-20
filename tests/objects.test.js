@@ -214,11 +214,22 @@ test('svcCovers: groups — every inner leaf must sit inside one outer leaf', ()
   assert.equal(sv.svcCovers('Missing', 'HTTP'), false);
 });
 
-test('svcCovers: a port range split across two members of a group is covered', {
-  todo: 'svcCovers needs one outer leaf to hold the whole inner range; it does not merge TCP 1-100 + TCP 101-200 like addrCovers merges IP ranges.',
-}, () => {
+test('svcCovers: a port range split across two members of a group is covered', () => {
   svcModel();
   assert.equal(sv.svcCovers('Split TCP', 'TCP 1-200'), true);
+  assert.equal(sv.svcCovers('Low TCP', 'TCP 1-200'), false);
+});
+
+test('svcCovers and addrCovers: a list of outer names covers together', () => {
+  svcModel();
+  assert.equal(sv.svcCovers(['Low TCP', 'Mid TCP'], 'TCP 1-200'), true);
+  assert.equal(sv.svcCovers(['HTTP', 'HTTPS'], 'Web'), true);
+  assert.equal(sv.svcCovers(['HTTP', 'DNS'], 'Web'), false);
+  assert.equal(sv.svcCovers(['HTTP', ''], 'Web'), true, 'Any in the list covers everything');
+  assert.equal(sv.svcCovers([], 'HTTP'), false);
+  use(exp().range('Low', '10.0.0.0', '10.0.0.127').range('High', '10.0.0.128', '10.0.0.255').network('Net', '10.0.0.0', '255.255.255.0'));
+  assert.equal(sv.addrCovers(['Low', 'High'], 'Net'), true);
+  assert.equal(sv.addrCovers(['Low'], 'Net'), false);
 });
 
 test('svcOverlap: any shared protocol/port counts; Any overlaps everything', () => {

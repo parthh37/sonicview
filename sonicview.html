@@ -533,7 +533,10 @@ function derive(){
   m.forwards=m.nat.filter(x=>x.transDst&&x.transDst!==x.origDst).map(x=>{
     const pub=addrRanges(x.origDst),inside=addrRanges(x.transDst);
     const publicHit=pub.some(r=>!isPrivate(r[0]))||ifaceZone(x.inIf)==='WAN';
-    const allow=m.rules.filter(r=>r.enabled&&r.action==='Allow'&&!r.auto&&r.dst&&(r.dst===x.origDst||overlaps(addrRanges(r.dst),pub))&&svcOverlap(r.svc,x.origSvc));
+    /* allow rules to the public address (or Any) from the zone the traffic arrives in: the inbound interface's zone;
+       with no inbound interface, WAN for a public address and any zone for an inside one */
+    const inZone=ifaceZone(x.inIf)||(publicHit?'WAN':'');
+    const allow=m.rules.filter(r=>r.enabled&&r.action==='Allow'&&!r.auto&&(!inZone||r.from===inZone)&&(!r.dst||r.dst===x.origDst||overlaps(addrRanges(r.dst),pub))&&svcOverlap(r.svc,x.origSvc));
     return {...x,pub,inside,kind:publicHit?'Inbound':'Internal',allow,
       pubPorts:x.origSvc?svcValue(x.origSvc):'Any',inPorts:x.transSvc?svcValue(x.transSvc):(x.origSvc?'same':'Any')};
   });
@@ -722,29 +725,39 @@ function addrPure(name,seen=new Set()){
   if(a.type===8)return a.members.every(x=>addrPure(x,seen));
   return a.type===1||a.type===2||a.type===4;
 }
+/* outer may be one name or a list of names that together must cover inner; '' is Any */
 function addrCovers(outer,inner){
-  if(!outer)return true;
+  const os=[].concat(outer);
+  if(os.some(x=>!x))return true;
   if(!inner)return false;
-  if(outer===inner)return true;
+  if(os.includes(inner))return true;
   if(!addrPure(inner))return false;
-  const o=mergeRanges(addrRanges(outer)),i=addrRanges(inner);
+  const o=mergeRanges(os.flatMap(x=>addrRanges(x))),i=addrRanges(inner);
   return i.length>0&&i.every(x=>o.some(y=>y[0]<=x[0]&&x[1]<=y[1]));
 }
 function svcCovers(outer,inner){
-  if(!outer)return true;
+  const os=[].concat(outer);
+  if(os.some(x=>!x))return true;
   if(!inner)return false;
-  if(outer===inner)return true;
-  const o=svcLeaves(outer),i=svcLeaves(inner);
-  return i.length>0&&i.every(x=>o.some(y=>y.proto===x.proto&&(isTU(x)?y.p1<=x.p1&&x.p2<=y.p2:x.proto!==1||y.p1===x.p1)));
+  if(os.includes(inner))return true;
+  const o=os.flatMap(x=>svcLeaves(x)),i=svcLeaves(inner);
+  /* TCP and UDP ports merged per protocol, so TCP 1-100 + TCP 101-200 covers TCP 1-200 */
+  const pr=p=>mergeRanges(o.filter(y=>y.proto===p).map(y=>[y.p1,y.p2])),tu={6:pr(6),17:pr(17)};
+  return i.length>0&&i.every(x=>isTU(x)?tu[x.proto].some(y=>y[0]<=x.p1&&x.p2<=y[1]):o.some(y=>y.proto===x.proto&&(x.proto!==1||y.p1===x.p1)));
 }
 const isDefaultRule=r=>r.auto&&!r.src&&!r.dst&&!r.svc;
 function ruleProblems(){
   if(M._problems)return M._problems;
   const m=M,out=[];
   const add=(sev,kind,o)=>out.push({sev,kind,...o});
-  /* rules that never match: an earlier rule in the same zone pair covers all their traffic */
+  /* rules that never match: an earlier rule in the same zone pair, or several together, cover all their traffic */
   const pairs=new Map();
   for(const r of m.rules){if(!r.enabled)continue;const k=r.from+'\u0001'+r.to;if(!pairs.has(k))pairs.set(k,[]);pairs.get(k).push(r);}
+  const D=['src','dst','svc'],cov=[addrCovers,addrCovers,svcCovers],memo=new Map();
+  /* long rule lists name the same objects again and again, so each answer for a pair of names is kept */
+  const cv=(d,a,b)=>{const k=(d<2?'a':'s')+'\u0001'+a+'\u0001'+b;let v=memo.get(k);if(v===undefined)memo.set(k,v=cov[d](a,b));return v;};
+  const meets=(d,a,b)=>d<2?overlaps(addrRanges(a),addrRanges(b)):svcOverlap(a,b);
+  const nums=es=>es.map(e=>'#'+e.n).join(', ').replace(/, (?=[^,]*$)/,' and ');
   for(const all of pairs.values()){
     /* the firewall checks its default Any/Any/Any rule last */
     const list=[...all.filter(r=>!isDefaultRule(r)),...all.filter(isDefaultRule)];
@@ -753,17 +766,49 @@ function ruleProblems(){
       const sig=[r.src,r.dst,r.svc,r.action,r.sched,r.whom].join('\u0001');
       if(seen.has(sig)){const e=seen.get(sig);add('Medium','Duplicate rule',{rule:r,other:e,why:`Same as rule #${e.n}. One of them can go.`});return;}
       seen.set(sig,r);
+      const rA=r.action==='Allow';
+      /* es: the earlier rule(s) that take all of this rule's traffic */
+      const tell=es=>{
+        const eA=es[0].action==='Allow',w=es.length>1?`Rules ${nums(es)} are checked first and together`:`Rule #${es[0].n} is checked first and`,s=es.length>1?'':'s',o={rule:r,other:es[0],others:es};
+        if(eA===rA)add('Low','Never used (same result)',{...o,why:`${w} cover${s} all of this traffic. This rule changes nothing.`});
+        else if(eA)add('High','Block never works',{...o,why:`${w} allow${s} all of this traffic. This ${r.action} rule never blocks anything.`});
+        else add('Medium','Allow never works',{...o,why:`${w} block${s} all of this traffic. This allow rule never lets anything through.`});
+      };
+      /* earlier rules that always apply when this one would, with which of src, dst, svc each one covers */
+      const ok=[];
       for(let j=0;j<i;j++){
         const e=list[j];
         if(e.sched&&e.sched!==r.sched)continue;
         if(e.whom&&e.whom!=='0'&&e.whom!==r.whom)continue;
-        if(!addrCovers(e.src,r.src)||!addrCovers(e.dst,r.dst)||!svcCovers(e.svc,r.svc))continue;
-        const eA=e.action==='Allow',rA=r.action==='Allow';
-        if(eA===rA)add('Low','Never used (same result)',{rule:r,other:e,why:`Rule #${e.n} is checked first and covers all of this traffic. This rule changes nothing.`});
-        else if(eA)add('High','Block never works',{rule:r,other:e,why:`Rule #${e.n} is checked first and allows all of this traffic. This ${r.action} rule never blocks anything.`});
-        else add('Medium','Allow never works',{rule:r,other:e,why:`Rule #${e.n} is checked first and blocks all of this traffic. This allow rule never lets anything through.`});
-        break;
+        /* adding up needs two of the three covered, so skip the service check when neither address is */
+        const c=[cv(0,e.src,r.src),cv(1,e.dst,r.dst)];
+        if(!c[0]&&!c[1])continue;
+        c[2]=cv(2,e.svc,r.svc);
+        if(c.every(Boolean))return tell([e]);
+        ok.push({e,c,j});
       }
+      /* no one rule covers it: try several together, one part at a time. Rules that each cover the source
+         and destination can add up their services; the same for source + service and destination + service.
+         Only rules with the same result, or only rules with the opposite result, are added up, so the kind is
+         clear; the set that is complete soonest in rule order is named. Not found: sets that need two parts
+         added up at once (A → X plus B → Y), and sets that mix allow and block rules. */
+      let best=null;
+      D.forEach((k,d)=>{
+        if(!r[k])return;
+        for(const same of [true,false]){
+          const s=ok.filter(x=>((x.e.action==='Allow')===rA)===same&&x.c.every((v,q)=>v||q===d)&&meets(d,x.e[k],r[k]));
+          const covers=n=>cov[d](s.slice(0,n).map(x=>x.e[k]),r[k]);
+          if(!s.length||!covers(s.length))continue;
+          /* the shortest run of rules from the top that covers it, then leave out later ones that add nothing */
+          let lo=1,hi=s.length;
+          while(lo<hi){const mid=lo+hi>>1;if(covers(mid))hi=mid;else lo=mid+1;}
+          if(best&&s[lo-1].j>=best.at)continue;
+          let es=s.slice(0,lo).map(x=>x.e);
+          for(let q=es.length-2;q>=0;q--){const t=es.filter((_,z)=>z!==q);if(cov[d](t.map(e=>e[k]),r[k]))es=t;}
+          best={at:s[lo-1].j,es};
+        }
+      });
+      if(best)tell(best.es);
     });
   }
   /* rules that open too much */
