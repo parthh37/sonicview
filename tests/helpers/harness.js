@@ -14,7 +14,7 @@ const HTML_PATH = path.join(__dirname, '..', '..', 'sonicview.html');
 /* functions and constants the tests reach for; a rename in the app fails loudly here */
 const EXPORTS = [
   'ip2n', 'n2ip', 'maskBits', 'isPrivate',
-  'parseExp', 'buildModel', 'derive',
+  'parseExp', 'buildModel', 'derive', 'ipStatus', 'VIEWS',
   'addrRanges', 'addrHosts', 'addrPure', 'addrValue', 'mergeRanges', 'addrCovers',
   'svcLeaves', 'svcValue', 'svcOverlap', 'svcCovers', 'overlaps',
   'ruleProblems', 'mainProblems', 'isDefaultRule', 'unusedObjects',

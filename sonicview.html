@@ -573,13 +573,18 @@ function derive(){
     subs.set(k,{key:k,net:f.net,cidr:f.cidr,size:f.size,bc:f.bc,ifaces:[f],zone:f.zone});
   }
   m.subnets=[...subs.values()].sort((a,b)=>(a.zone==='WAN'?0:1)-(b.zone==='WAN'?0:1)||a.net-b.net);
+  /* walk only the claimed IPs (plus network/broadcast), never every address: a /8 or a 0.0.0.0 mask costs what a /24 does */
+  const keys=[...claims.keys()].sort((a,b)=>a-b);
   for(const s of m.subnets){
-    const c={iface:0,used:0,dhcp:0,free:0,res:0};const free=[];let fs=null;
-    for(let n=s.net;n<=s.bc;n++){
-      const st=ipStatus(n,s);c[st]++;
-      if(st==='free'){if(fs==null)fs=n;}else if(fs!=null){free.push([fs,n-1]);fs=null;}
-    }
-    if(fs!=null)free.push([fs,s.bc]);
+    let lo=0,hi=keys.length;while(lo<hi){const mid=(lo+hi)>>1;if(keys[mid]<s.net)lo=mid+1;else hi=mid;}
+    for(hi=lo;hi<keys.length&&keys[hi]<=s.bc;hi++);
+    s.claimed=keys.slice(lo,hi);
+    const c={iface:0,used:0,dhcp:0,free:0,res:0},free=[],res=s.size>2;let fs=s.net;
+    /* fs = first IP not yet accounted for; a point already passed (n<fs) is a repeat */
+    const mark=n=>{if(n<fs)return;const st=ipStatus(n,s);if(st==='free')return;c[st]++;if(fs<n)free.push([fs,n-1]);fs=n+1;};
+    if(res)mark(s.net);for(const n of s.claimed)mark(n);if(res)mark(s.bc);
+    if(fs<=s.bc)free.push([fs,s.bc]);
+    c.free=s.size-c.iface-c.used-c.dhcp-c.res;
     s.counts=c;s.free=free;
   }
 }
@@ -1500,8 +1505,10 @@ ipmap(root){
     <div id="subpanel" style="margin-top:14px"></div>`;
   /* public tables */
   $('#pubs',root).innerHTML=m.subnets.filter(s=>s.zone==='WAN').map(s=>{
-    const f=s.ifaces[0];const rows=[];
-    for(let n=s.net+(s.size>2?1:0);n<=s.bc-(s.size>2?1:0);n++){
+    const f=s.ifaces[0];const rows=[];const lo=s.net+(s.size>2?1:0),hi=s.bc-(s.size>2?1:0);
+    /* a WAN subnet is normally a few IPs: list each one. A huge one (e.g. mask 0.0.0.0) lists only the IPs in use */
+    const big=s.size>1024;
+    for(const n of big?s.claimed.filter(n=>n>=lo&&n<=hi&&ipStatus(n,s)!=='free'):Array.from({length:hi-lo+1},(_,i)=>lo+i)){
       const st=ipStatus(n,s);const cl=m.claims.get(n)||[];
       const badge=st==='free'?'<span class="badge b-allow">Free</span>':st==='iface'?'<span class="badge b-plain" style="color:var(--s1)">Firewall</span>':'<span class="badge b-warn">In use</span>';
       const fwSeen=new Set();const fw=m.forwards.filter(x=>x.enabled&&x.pub.some(r=>n>=r[0]&&n<=r[1])).filter(x=>{const k=x.pubPorts+'|'+x.transDst+'|'+x.inPorts;if(fwSeen.has(k))return false;fwSeen.add(k);return true;});
@@ -1510,8 +1517,8 @@ ipmap(root){
       const natN=cl.filter(c=>c.kind==='nat').length;
       rows.push(`<tr><td class="mono"><a class="ref" href="${H('search',n2ip(n))}">${n2ip(n)}</a></td><td>${badge}</td><td>${what||'<span class="muted">—</span>'}${natN?`<span class="sub">${plural(natN,'NAT policy')}</span>`:''}</td><td>${fwHtml||'<span class="muted">—</span>'}</td></tr>`);
     }
-    return `<div class="tblwrap"><div class="tbar"><b>${esc(f.name)}</b><span class="ink2">${esc(f.comment)}</span><span class="tcount mono">${n2ip(s.net)}/${s.cidr} · <b>${s.counts.free} free</b></span></div>
-      <div class="tscroll"><table class="pubtbl"><thead><tr><th>IP</th><th>Status</th><th>What it is</th><th>Port forwards (on)</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+    return `<div class="tblwrap"><div class="tbar"><b>${esc(f.name)}</b><span class="ink2">${esc(f.comment)}</span><span class="tcount mono">${n2ip(s.net)}/${s.cidr} · <b>${s.counts.free.toLocaleString()} free</b></span></div>
+      <div class="tscroll"><table class="pubtbl"><thead><tr><th>IP</th><th>Status</th><th>What it is</th><th>Port forwards (on)</th></tr></thead><tbody>${rows.join('')}${big?`<tr><td colspan="4" class="muted">This subnet has ${s.size.toLocaleString()} addresses, so only the IPs in use are listed. Its ${s.counts.free.toLocaleString()} free IPs are under All subnets.</td></tr>`:''}</tbody></table></div></div>`;
   }).join('')||'<p class="muted">No WAN subnet found.</p>';
   /* chips */
   let sel=(m.subnets.find(s=>s.zone!=='WAN')||m.subnets[0])?.key;
@@ -1528,12 +1535,15 @@ ipmap(root){
     let blk=0;
     const ifn=s.ifaces[0].ipn;if(blocks>1&&ifn!=null)blk=Math.floor((ifn-s.net)/256);
     const usedRows=[];
-    for(let n=s.net;n<=s.bc;n++){const cl=m.claims.get(n);if(cl&&ipStatus(n,s)!=='free')usedRows.push({n,ip:n2ip(n),st:ipStatus(n,s),uses:claimLines(cl,10).join(' · ')});}
+    for(const n of s.claimed){const st=ipStatus(n,s);if(st!=='free')usedRows.push({n,ip:n2ip(n),st,uses:claimLines(m.claims.get(n),10).join(' · ')});}
+    /* used IPs per /24 block; past a /16 there are too many blocks to draw, so only blocks with used IPs get a square */
+    const bused=new Map();for(const r of usedRows)if(r.st!=='res'){const b=Math.floor((r.n-s.net)/256);bused.set(b,(bused.get(b)||0)+1);}
+    const allBlocks=blocks<=256;
     panel.innerHTML=`<div class="card">
       <h3>${esc(s.ifaces.map(x=>x.name).join(', '))} · <span class="mono">${n2ip(s.net)}/${s.cidr}</span> <span class="muted">(${s.zone})</span></h3>
       <div class="ink2">${s.size.toLocaleString()} addresses · <b>${c.free.toLocaleString()} free</b> · ${c.iface} firewall · ${c.used.toLocaleString()} used in config · ${c.dhcp.toLocaleString()} in active DHCP pool</div>
       <div class="legend">${['iface','used','dhcp','free','res'].map(k=>`<span><i class="sw st-${k}"></i>${STLABEL[k]}</span>`).join('')}</div>
-      ${blocks>1?`<div class="ink2" style="font-size:13px">This subnet is big. Pick a /24 block (darker = more IPs used):</div><div class="blocks" id="blocks"></div>`:''}
+      ${blocks>1?`<div class="ink2" style="font-size:13px">${allBlocks?'This subnet is big. Pick a /24 block':`This subnet is very big (${blocks.toLocaleString()} /24 blocks). Only the ${bused.size.toLocaleString()} blocks with used IPs are shown. Pick one`} (darker = more IPs used):</div><div class="blocks" id="blocks"></div>`:''}
       <div id="gridhost"></div>
     </div>
     <h3 style="margin-top:16px">Used IPs in this subnet</h3><div id="usedtbl"></div>
@@ -1557,9 +1567,8 @@ ipmap(root){
     }
     function drawBlocks(){
       const host=$('#blocks',panel);let h='';
-      for(let b=0;b<blocks;b++){
-        let u=0;const st=s.net+b*256;
-        for(let n=st;n<st+256;n++){const x=ipStatus(n,s);if(x!=='free'&&x!=='res')u++;}
+      for(const b of allBlocks?Array.from({length:blocks},(_,i)=>i):[...new Set([...bused.keys(),blk])].sort((a,b)=>a-b)){
+        const u=bused.get(b)||0,st=s.net+b*256;
         const q=u===0?' e':' q'+Math.min(6,1+Math.floor(Math.log2(u+1)*0.75));
         h+=`<div class="blk${q}${b===blk?' sel':''}" data-b="${b}" data-tip="${esc(n2ip(st)+'/24\n'+u+' used · '+(256-u)+' free or reserved')}"></div>`;
       }
