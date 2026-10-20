@@ -15,13 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+
+      # A stale hash would ship a page whose script the browser refuses to run
+      - name: Check CSP hashes
+        run: node tools/update-csp.mjs --check
 
       - name: Build site
         run: |

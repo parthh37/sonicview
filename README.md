@@ -42,6 +42,8 @@ Light and dark themes, deep links for every page, and no dependencies — it's o
 
 - Your `.exp` file is read with the browser's File API and **never leaves your computer**.
   There is no server, no analytics and no third-party script.
+- **Enforced by CSP:** the page's Content-Security-Policy makes the browser block every fetch, image,
+  font, frame and form post, and run only SonicView's own inline script. It is at the top of the page source.
 - Values that look like passwords, keys or secrets are hidden in the *All settings* view.
 - So that links can open in new tabs, the loaded file is kept in this browser's `localStorage`.
   Use **Forget saved file** in the footer when you are done, especially on a shared computer.
@@ -72,7 +74,34 @@ python3 -m http.server 8765
 ```
 
 Then open http://localhost:8765/sonicview.html. Every push to `main` deploys to GitHub Pages via
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml), but only after the tests pass.
+
+### Tests
+
+The parser, model and analysis logic (rule problems, unused objects, compare, CSV export) have tests
+that run against `sonicview.html` itself, so there is no build step and nothing to install. You need
+Node.js 22 or newer:
+
+```bash
+node --test
+```
+
+[`tests/helpers/harness.js`](tests/helpers/harness.js) pulls the inline `<script>` out of the page and
+runs it in a `node:vm` sandbox with a small DOM stub. If you rename a function the tests use, update
+the list at the top of that file. [`tests/helpers/exp.js`](tests/helpers/exp.js) builds **synthetic**
+exports (`office()` is a ready-made small network). Use only documentation IPs (192.0.2.0/24,
+198.51.100.0/24, 203.0.113.0/24) and private ranges in fixtures, and never commit a real `.exp`.
+
+Tests with a `todo` option (⚠ in the output, counted as `todo` in the summary) describe known gaps.
+They assert the behaviour we want and do not fail the run. When you fix one, remove its `todo` option. The [Tests workflow](.github/workflows/tests.yml)
+runs on every push and pull request.
+
+The Content-Security-Policy allows the inline `<script>` and `<style>` by their SHA-256 hashes. After
+you edit either one, refresh the hashes (CI fails on a pull request whose hashes are stale):
+
+```bash
+node tools/update-csp.mjs
+```
 
 The sample data is defined in [`tools/make-sample.mjs`](tools/make-sample.mjs). After you change it, run
 `node tools/make-sample.mjs` to rebuild the copy embedded in `sonicview.html`

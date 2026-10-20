@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- The browser enforces the privacy promise: the page cannot fetch, load or post anything, and only
+     the inline <script> and <style> below may run (by SHA-256 hash). style="" attributes stay allowed because the
+     maps place their boxes with computed inline positions; style-src is only the fallback for browsers
+     without style-src-elem/-attr. After editing the script or style, run: node tools/update-csp.mjs -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RpIY/vUyTeONoYb4Z78SH7ufdd5Dl6MTmCKr18Qeg88='; style-src 'unsafe-inline'; style-src-elem 'sha256-EWBMv0dn+Rxb0l0twOX5F7PoTYPp59Ckx+cNJpzgGvY='; style-src-attr 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>SonicView Firewall Visualizer</title>
 <style>
 :root{
@@ -801,7 +806,10 @@ function derive(){
   m.forwards=m.nat.filter(x=>x.transDst&&x.transDst!==x.origDst).map(x=>{
     const pub=addrRanges(x.origDst),inside=addrRanges(x.transDst);
     const publicHit=pub.some(r=>!isPrivate(r[0]))||ifaceZone(x.inIf)==='WAN';
-    const allow=m.rules.filter(r=>r.enabled&&r.action==='Allow'&&!r.auto&&r.dst&&(r.dst===x.origDst||overlaps(addrRanges(r.dst),pub))&&svcOverlap(r.svc,x.origSvc));
+    /* allow rules to the public address (or Any) from the zone the traffic arrives in: the inbound interface's zone;
+       with no inbound interface, WAN for a public address and any zone for an inside one */
+    const inZone=ifaceZone(x.inIf)||(publicHit?'WAN':'');
+    const allow=m.rules.filter(r=>r.enabled&&r.action==='Allow'&&!r.auto&&(!inZone||r.from===inZone)&&(!r.dst||r.dst===x.origDst||overlaps(addrRanges(r.dst),pub))&&svcOverlap(r.svc,x.origSvc));
     return {...x,pub,inside,kind:publicHit?'Inbound':'Internal',allow,
       pubPorts:x.origSvc?svcValue(x.origSvc):'Any',inPorts:x.transSvc?svcValue(x.transSvc):(x.origSvc?'same':'Any')};
   });
@@ -836,13 +844,18 @@ function derive(){
     subs.set(k,{key:k,net:f.net,cidr:f.cidr,size:f.size,bc:f.bc,ifaces:[f],zone:f.zone});
   }
   m.subnets=[...subs.values()].sort((a,b)=>(a.zone==='WAN'?0:1)-(b.zone==='WAN'?0:1)||a.net-b.net);
+  /* walk only the claimed IPs (plus network/broadcast), never every address: a /8 or a 0.0.0.0 mask costs what a /24 does */
+  const keys=[...claims.keys()].sort((a,b)=>a-b);
   for(const s of m.subnets){
-    const c={iface:0,used:0,dhcp:0,free:0,res:0};const free=[];let fs=null;
-    for(let n=s.net;n<=s.bc;n++){
-      const st=ipStatus(n,s);c[st]++;
-      if(st==='free'){if(fs==null)fs=n;}else if(fs!=null){free.push([fs,n-1]);fs=null;}
-    }
-    if(fs!=null)free.push([fs,s.bc]);
+    let lo=0,hi=keys.length;while(lo<hi){const mid=(lo+hi)>>1;if(keys[mid]<s.net)lo=mid+1;else hi=mid;}
+    for(hi=lo;hi<keys.length&&keys[hi]<=s.bc;hi++);
+    s.claimed=keys.slice(lo,hi);
+    const c={iface:0,used:0,dhcp:0,free:0,res:0},free=[],res=s.size>2;let fs=s.net;
+    /* fs = first IP not yet accounted for; a point already passed (n<fs) is a repeat */
+    const mark=n=>{if(n<fs)return;const st=ipStatus(n,s);if(st==='free')return;c[st]++;if(fs<n)free.push([fs,n-1]);fs=n+1;};
+    if(res)mark(s.net);for(const n of s.claimed)mark(n);if(res)mark(s.bc);
+    if(fs<=s.bc)free.push([fs,s.bc]);
+    c.free=s.size-c.iface-c.used-c.dhcp-c.res;
     s.counts=c;s.free=free;
   }
 }
@@ -877,7 +890,7 @@ function saveFile(name,text,type){
 }
 function csvCell(v){
   let s=v==null?'':String(v);
-  if(/^[=+@\t\r]/.test(s)||/^-[^\d]/.test(s))s="'"+s;   /* stop spreadsheet formulas */
+  if(/^[=+@\t\r]/.test(s)||/^-(?!\d+(\.\d+)?$)[\s\S]/.test(s))s="'"+s;   /* stop spreadsheet formulas; plain negative numbers stay numbers */
   return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
 }
 function saveCsv(name,lines){
@@ -990,29 +1003,39 @@ function addrPure(name,seen=new Set()){
   if(a.type===8)return a.members.every(x=>addrPure(x,seen));
   return a.type===1||a.type===2||a.type===4;
 }
+/* outer may be one name or a list of names that together must cover inner; '' is Any */
 function addrCovers(outer,inner){
-  if(!outer)return true;
+  const os=[].concat(outer);
+  if(os.some(x=>!x))return true;
   if(!inner)return false;
-  if(outer===inner)return true;
+  if(os.includes(inner))return true;
   if(!addrPure(inner))return false;
-  const o=mergeRanges(addrRanges(outer)),i=addrRanges(inner);
+  const o=mergeRanges(os.flatMap(x=>addrRanges(x))),i=addrRanges(inner);
   return i.length>0&&i.every(x=>o.some(y=>y[0]<=x[0]&&x[1]<=y[1]));
 }
 function svcCovers(outer,inner){
-  if(!outer)return true;
+  const os=[].concat(outer);
+  if(os.some(x=>!x))return true;
   if(!inner)return false;
-  if(outer===inner)return true;
-  const o=svcLeaves(outer),i=svcLeaves(inner);
-  return i.length>0&&i.every(x=>o.some(y=>y.proto===x.proto&&(isTU(x)?y.p1<=x.p1&&x.p2<=y.p2:x.proto!==1||y.p1===x.p1)));
+  if(os.includes(inner))return true;
+  const o=os.flatMap(x=>svcLeaves(x)),i=svcLeaves(inner);
+  /* TCP and UDP ports merged per protocol, so TCP 1-100 + TCP 101-200 covers TCP 1-200 */
+  const pr=p=>mergeRanges(o.filter(y=>y.proto===p).map(y=>[y.p1,y.p2])),tu={6:pr(6),17:pr(17)};
+  return i.length>0&&i.every(x=>isTU(x)?tu[x.proto].some(y=>y[0]<=x.p1&&x.p2<=y[1]):o.some(y=>y.proto===x.proto&&(x.proto!==1||y.p1===x.p1)));
 }
 const isDefaultRule=r=>r.auto&&!r.src&&!r.dst&&!r.svc;
 function ruleProblems(){
   if(M._problems)return M._problems;
   const m=M,out=[];
   const add=(sev,kind,o)=>out.push({sev,kind,...o});
-  /* rules that never match: an earlier rule in the same zone pair covers all their traffic */
+  /* rules that never match: an earlier rule in the same zone pair, or several together, cover all their traffic */
   const pairs=new Map();
   for(const r of m.rules){if(!r.enabled)continue;const k=r.from+'\u0001'+r.to;if(!pairs.has(k))pairs.set(k,[]);pairs.get(k).push(r);}
+  const D=['src','dst','svc'],cov=[addrCovers,addrCovers,svcCovers],memo=new Map();
+  /* long rule lists name the same objects again and again, so each answer for a pair of names is kept */
+  const cv=(d,a,b)=>{const k=(d<2?'a':'s')+'\u0001'+a+'\u0001'+b;let v=memo.get(k);if(v===undefined)memo.set(k,v=cov[d](a,b));return v;};
+  const meets=(d,a,b)=>d<2?overlaps(addrRanges(a),addrRanges(b)):svcOverlap(a,b);
+  const nums=es=>es.map(e=>'#'+e.n).join(', ').replace(/, (?=[^,]*$)/,' and ');
   for(const all of pairs.values()){
     /* the firewall checks its default Any/Any/Any rule last */
     const list=[...all.filter(r=>!isDefaultRule(r)),...all.filter(isDefaultRule)];
@@ -1021,17 +1044,49 @@ function ruleProblems(){
       const sig=[r.src,r.dst,r.svc,r.action,r.sched,r.whom].join('\u0001');
       if(seen.has(sig)){const e=seen.get(sig);add('Medium','Duplicate rule',{rule:r,other:e,why:`Same as rule #${e.n}. One of them can go.`});return;}
       seen.set(sig,r);
+      const rA=r.action==='Allow';
+      /* es: the earlier rule(s) that take all of this rule's traffic */
+      const tell=es=>{
+        const eA=es[0].action==='Allow',w=es.length>1?`Rules ${nums(es)} are checked first and together`:`Rule #${es[0].n} is checked first and`,s=es.length>1?'':'s',o={rule:r,other:es[0],others:es};
+        if(eA===rA)add('Low','Never used (same result)',{...o,why:`${w} cover${s} all of this traffic. This rule changes nothing.`});
+        else if(eA)add('High','Block never works',{...o,why:`${w} allow${s} all of this traffic. This ${r.action} rule never blocks anything.`});
+        else add('Medium','Allow never works',{...o,why:`${w} block${s} all of this traffic. This allow rule never lets anything through.`});
+      };
+      /* earlier rules that always apply when this one would, with which of src, dst, svc each one covers */
+      const ok=[];
       for(let j=0;j<i;j++){
         const e=list[j];
         if(e.sched&&e.sched!==r.sched)continue;
         if(e.whom&&e.whom!=='0'&&e.whom!==r.whom)continue;
-        if(!addrCovers(e.src,r.src)||!addrCovers(e.dst,r.dst)||!svcCovers(e.svc,r.svc))continue;
-        const eA=e.action==='Allow',rA=r.action==='Allow';
-        if(eA===rA)add('Low','Never used (same result)',{rule:r,other:e,why:`Rule #${e.n} is checked first and covers all of this traffic. This rule changes nothing.`});
-        else if(eA)add('High','Block never works',{rule:r,other:e,why:`Rule #${e.n} is checked first and allows all of this traffic. This ${r.action} rule never blocks anything.`});
-        else add('Medium','Allow never works',{rule:r,other:e,why:`Rule #${e.n} is checked first and blocks all of this traffic. This allow rule never lets anything through.`});
-        break;
+        /* adding up needs two of the three covered, so skip the service check when neither address is */
+        const c=[cv(0,e.src,r.src),cv(1,e.dst,r.dst)];
+        if(!c[0]&&!c[1])continue;
+        c[2]=cv(2,e.svc,r.svc);
+        if(c.every(Boolean))return tell([e]);
+        ok.push({e,c,j});
       }
+      /* no one rule covers it: try several together, one part at a time. Rules that each cover the source
+         and destination can add up their services; the same for source + service and destination + service.
+         Only rules with the same result, or only rules with the opposite result, are added up, so the kind is
+         clear; the set that is complete soonest in rule order is named. Not found: sets that need two parts
+         added up at once (A → X plus B → Y), and sets that mix allow and block rules. */
+      let best=null;
+      D.forEach((k,d)=>{
+        if(!r[k])return;
+        for(const same of [true,false]){
+          const s=ok.filter(x=>((x.e.action==='Allow')===rA)===same&&x.c.every((v,q)=>v||q===d)&&meets(d,x.e[k],r[k]));
+          const covers=n=>cov[d](s.slice(0,n).map(x=>x.e[k]),r[k]);
+          if(!s.length||!covers(s.length))continue;
+          /* the shortest run of rules from the top that covers it, then leave out later ones that add nothing */
+          let lo=1,hi=s.length;
+          while(lo<hi){const mid=lo+hi>>1;if(covers(mid))hi=mid;else lo=mid+1;}
+          if(best&&s[lo-1].j>=best.at)continue;
+          let es=s.slice(0,lo).map(x=>x.e);
+          for(let q=es.length-2;q>=0;q--){const t=es.filter((_,z)=>z!==q);if(cov[d](t.map(e=>e[k]),r[k]))es=t;}
+          best={at:s[lo-1].j,es};
+        }
+      });
+      if(best)tell(best.es);
     });
   }
   /* rules that open too much */
@@ -1763,8 +1818,10 @@ ipmap(root){
     <div id="subpanel" style="margin-top:14px"></div>`;
   /* public tables */
   $('#pubs',root).innerHTML=m.subnets.filter(s=>s.zone==='WAN').map(s=>{
-    const f=s.ifaces[0];const rows=[];
-    for(let n=s.net+(s.size>2?1:0);n<=s.bc-(s.size>2?1:0);n++){
+    const f=s.ifaces[0];const rows=[];const lo=s.net+(s.size>2?1:0),hi=s.bc-(s.size>2?1:0);
+    /* a WAN subnet is normally a few IPs: list each one. A huge one (e.g. mask 0.0.0.0) lists only the IPs in use */
+    const big=s.size>1024;
+    for(const n of big?s.claimed.filter(n=>n>=lo&&n<=hi&&ipStatus(n,s)!=='free'):Array.from({length:hi-lo+1},(_,i)=>lo+i)){
       const st=ipStatus(n,s);const cl=m.claims.get(n)||[];
       const badge=st==='free'?'<span class="badge b-allow">Free</span>':st==='iface'?'<span class="badge b-plain" style="color:var(--s1)">Firewall</span>':'<span class="badge b-warn">In use</span>';
       const fwSeen=new Set();const fw=m.forwards.filter(x=>x.enabled&&x.pub.some(r=>n>=r[0]&&n<=r[1])).filter(x=>{const k=x.pubPorts+'|'+x.transDst+'|'+x.inPorts;if(fwSeen.has(k))return false;fwSeen.add(k);return true;});
@@ -1773,8 +1830,8 @@ ipmap(root){
       const natN=cl.filter(c=>c.kind==='nat').length;
       rows.push(`<tr><td class="mono"><a class="ref" href="${H('search',n2ip(n))}">${n2ip(n)}</a></td><td>${badge}</td><td>${what||'<span class="muted">—</span>'}${natN?`<span class="sub">${plural(natN,'NAT policy')}</span>`:''}</td><td>${fwHtml||'<span class="muted">—</span>'}</td></tr>`);
     }
-    return `<div class="tblwrap"><div class="tbar"><b>${esc(f.name)}</b><span class="ink2">${esc(f.comment)}</span><span class="tcount mono">${n2ip(s.net)}/${s.cidr} · <b>${s.counts.free} free</b></span></div>
-      <div class="tscroll"><table class="pubtbl"><thead><tr><th>IP</th><th>Status</th><th>What it is</th><th>Port forwards (on)</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+    return `<div class="tblwrap"><div class="tbar"><b>${esc(f.name)}</b><span class="ink2">${esc(f.comment)}</span><span class="tcount mono">${n2ip(s.net)}/${s.cidr} · <b>${s.counts.free.toLocaleString()} free</b></span></div>
+      <div class="tscroll"><table class="pubtbl"><thead><tr><th>IP</th><th>Status</th><th>What it is</th><th>Port forwards (on)</th></tr></thead><tbody>${rows.join('')}${big?`<tr><td colspan="4" class="muted">This subnet has ${s.size.toLocaleString()} addresses, so only the IPs in use are listed. Its ${s.counts.free.toLocaleString()} free IPs are under All subnets.</td></tr>`:''}</tbody></table></div></div>`;
   }).join('')||'<p class="muted">No WAN subnet found.</p>';
   /* chips */
   let sel=(m.subnets.find(s=>s.zone!=='WAN')||m.subnets[0])?.key;
@@ -1791,12 +1848,15 @@ ipmap(root){
     let blk=0;
     const ifn=s.ifaces[0].ipn;if(blocks>1&&ifn!=null)blk=Math.floor((ifn-s.net)/256);
     const usedRows=[];
-    for(let n=s.net;n<=s.bc;n++){const cl=m.claims.get(n);if(cl&&ipStatus(n,s)!=='free')usedRows.push({n,ip:n2ip(n),st:ipStatus(n,s),uses:claimLines(cl,10).join(' · ')});}
+    for(const n of s.claimed){const st=ipStatus(n,s);if(st!=='free')usedRows.push({n,ip:n2ip(n),st,uses:claimLines(m.claims.get(n),10).join(' · ')});}
+    /* used IPs per /24 block; past a /16 there are too many blocks to draw, so only blocks with used IPs get a square */
+    const bused=new Map();for(const r of usedRows)if(r.st!=='res'){const b=Math.floor((r.n-s.net)/256);bused.set(b,(bused.get(b)||0)+1);}
+    const allBlocks=blocks<=256;
     panel.innerHTML=`<div class="card">
       <h3>${esc(s.ifaces.map(x=>x.name).join(', '))} · <span class="mono">${n2ip(s.net)}/${s.cidr}</span> <span class="muted">(${s.zone})</span></h3>
       <div class="ink2">${s.size.toLocaleString()} addresses · <b>${c.free.toLocaleString()} free</b> · ${c.iface} firewall · ${c.used.toLocaleString()} used in config · ${c.dhcp.toLocaleString()} in active DHCP pool</div>
       <div class="legend">${['iface','used','dhcp','free','res'].map(k=>`<span><i class="sw st-${k}"></i>${STLABEL[k]}</span>`).join('')}</div>
-      ${blocks>1?`<div class="ink2" style="font-size:13px">This subnet is big. Pick a /24 block (darker = more IPs used):</div><div class="blocks" id="blocks"></div>`:''}
+      ${blocks>1?`<div class="ink2" style="font-size:13px">${allBlocks?'This subnet is big. Pick a /24 block':`This subnet is very big (${blocks.toLocaleString()} /24 blocks). Only the ${bused.size.toLocaleString()} blocks with used IPs are shown. Pick one`} (darker = more IPs used):</div><div class="blocks" id="blocks"></div>`:''}
       <div id="gridhost"></div>
     </div>
     <h3 style="margin-top:16px">Used IPs in this subnet</h3><div id="usedtbl"></div>
@@ -1820,9 +1880,8 @@ ipmap(root){
     }
     function drawBlocks(){
       const host=$('#blocks',panel);let h='';
-      for(let b=0;b<blocks;b++){
-        let u=0;const st=s.net+b*256;
-        for(let n=st;n<st+256;n++){const x=ipStatus(n,s);if(x!=='free'&&x!=='res')u++;}
+      for(const b of allBlocks?Array.from({length:blocks},(_,i)=>i):[...new Set([...bused.keys(),blk])].sort((a,b)=>a-b)){
+        const u=bused.get(b)||0,st=s.net+b*256;
         const q=u===0?' e':' q'+Math.min(6,1+Math.floor(Math.log2(u+1)*0.75));
         h+=`<div class="blk${q}${b===blk?' sel':''}" data-b="${b}" data-tip="${esc(n2ip(st)+'/24\n'+u+' used · '+(256-u)+' free or reserved')}"></div>`;
       }
