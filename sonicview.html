@@ -7,7 +7,7 @@
      the inline <script> and <style> below may run (by SHA-256 hash). style="" attributes stay allowed because the
      maps place their boxes with computed inline positions; style-src is only the fallback for browsers
      without style-src-elem/-attr. After editing the script or style, run: node tools/update-csp.mjs -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RpIY/vUyTeONoYb4Z78SH7ufdd5Dl6MTmCKr18Qeg88='; style-src 'unsafe-inline'; style-src-elem 'sha256-EWBMv0dn+Rxb0l0twOX5F7PoTYPp59Ckx+cNJpzgGvY='; style-src-attr 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FN9qUIK3IyAy/7OgMkEFkuFYZMTn3NZhhPGylNLgHHA='; style-src 'unsafe-inline'; style-src-elem 'sha256-EWBMv0dn+Rxb0l0twOX5F7PoTYPp59Ckx+cNJpzgGvY='; style-src-attr 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>SonicView Firewall Visualizer</title>
 <style>
 :root{
@@ -875,7 +875,7 @@ function snapshot(m){
     S['DHCP']=new Map(m.dhcp.map(d=>[d.start+' – '+d.end,[d.active?'on':'off','gateway '+d.router,'DNS '+d.dns.join(', '),d.domain].filter(Boolean).join(' · ')]));
     S['Users']=new Map([...m.users.map(u=>['User '+u.name,'groups: '+(u.memberOf.join(', ')||'-')]),...m.ugroups.map(g=>['Group '+g.name,'members: '+(g.members.join(', ')||'-')])]);
     const st=x=>(x.enabled?'on':'off')+(x.comment?' · '+x.comment:'');
-    S._rules=m.rules.map(r=>({key:[r.from,r.to,r.src,r.dst,r.svc,r.action,r.sched,r.whom].join('\u0001'),st:st(r),show:`#${r.n} · ${st(r)}`,
+    S._rules=m.rules.map(r=>({key:[r.from,r.to,r.src,r.dst,r.svc,r.action,r.sched,r.whom].join('\u0001'),n:r.n,zp:r.from+'\u0001'+r.to,st:st(r),show:`#${r.n} · ${st(r)}`,
       label:`${r.action} ${r.from} → ${r.to} · ${r.src||'Any'} → ${r.dst||'Any'} · ${r.svc||'Any'}${r.sched?' · '+r.sched:''}`}));
     S._nat=m.nat.map(x=>({key:[x.origSrc,x.origDst,x.origSvc,x.transSrc,x.transDst,x.transSvc,x.inIf,x.outIf].join('\u0001'),st:st(x),show:`#${x.n} · ${st(x)}`,
       label:`${x.origSrc||'Any'} → ${x.origDst||'Any'} (${x.origSvc||'Any'}) becomes ${x.transSrc||'Original'} → ${x.transDst||'Original'} (${x.transSvc||'Original'})`}));
@@ -884,6 +884,31 @@ function snapshot(m){
     S._other=new Map([...m.kv].filter(([k])=>!/_\d+$/.test(k)).map(([k,v])=>[k,SECRET.test(k)&&v?'•••• hidden':(v.length>200?`(long value, ${v.length} characters)`:v)]));
     return S;
   });
+}
+/* the firewall checks the rules of a zone pair top to bottom. Of the rules found in both files, the longest run
+   that kept its order stays put; the others moved. pairs: [old, new] in new-file order. Returns new -> where it is now. */
+function movedRules(pairs){
+  const groups=new Map(),moved=new Map();
+  for(const p of pairs){const z=p[1].zp;if(!groups.has(z))groups.set(z,[]);groups.get(z).push(p);}
+  for(const l of groups.values()){
+    /* longest run whose old numbers rise (patience sorting); an added or removed rule is not in l, so it moves nothing */
+    const tails=[],prev=[];
+    l.forEach(([x],i)=>{
+      let lo=0,hi=tails.length;
+      while(lo<hi){const mid=(lo+hi)>>1;if(l[tails[mid]][0].n<x.n)lo=mid+1;else hi=mid;}
+      prev[i]=lo?tails[lo-1]:-1;tails[lo]=i;
+    });
+    const stay=new Set();
+    for(let i=tails[tails.length-1];i>=0;i=prev[i])stay.add(i);
+    l.forEach(([,y],i)=>{
+      if(stay.has(i))return;
+      let j=i+1;while(j<l.length&&!stay.has(j))j++;
+      if(j<l.length){moved.set(y,'now checked before rule #'+l[j][1].n);return;}
+      j=i-1;while(!stay.has(j))j--;
+      moved.set(y,'now checked after rule #'+l[j][1].n);
+    });
+  }
+  return moved;
 }
 function diffModels(A,B){
   const out=[];
@@ -897,10 +922,12 @@ function diffModels(A,B){
   for(const [area,key] of [['Firewall rules','_rules'],['NAT policies','_nat'],['Routes','_routes']]){
     const pool=new Map();
     for(const x of A[key]){if(!pool.has(x.key))pool.set(x.key,[]);pool.get(x.key).push(x);}
-    for(const y of B[key]){
-      const l=pool.get(y.key);
-      if(l&&l.length){const x=l.shift();if(x.st!==y.st)push(area,'Changed',y.label,x.show,y.show);}
-      else push(area,'Added',y.label,'',y.show);
+    const pairs=B[key].map(y=>[pool.get(y.key)?.shift(),y]);
+    const moved=key==='_rules'?movedRules(pairs.filter(p=>p[0])):new Map();
+    for(const [x,y] of pairs){
+      if(!x)push(area,'Added',y.label,'',y.show);
+      else if(moved.has(y))push(area,'Moved',y.label,x.show,y.show+' · '+moved.get(y));
+      else if(x.st!==y.st)push(area,'Changed',y.label,x.show,y.show);
     }
     for(const l of pool.values())for(const x of l)push(area,'Removed',x.label,x.show,'');
   }
@@ -2030,7 +2057,7 @@ compare(root){
     const [an,bn]=older?[o.name,fileName]:[fileName,o.name];
     const rows=diffModels(A,B);
     out.innerHTML=`<p class="ink2">From <b>${esc(an)}</b> (older) to <b>${esc(bn)}</b> (newer): <b>${plural(rows.length,'change')}</b>. Click a box to show only that part.</p>`+
-      (rows.length?tiles(rows,(a,l)=>`<button type="button" class="tile" data-a="${esc(a)}"><div class="v">${l.length}</div><div class="l">${esc(a)}</div><div class="s">${['Added','Removed','Changed'].map(c=>l.filter(r=>r.change===c).length+' '+c.toLowerCase()).join(' · ')}</div></button>`):'<p class="note">The two files have the same settings.</p>');
+      (rows.length?tiles(rows,(a,l)=>`<button type="button" class="tile" data-a="${esc(a)}"><div class="v">${l.length}</div><div class="l">${esc(a)}</div><div class="s">${['Added','Removed','Changed','Moved'].map(c=>[c,l.filter(r=>r.change===c).length]).filter(([c,k])=>k||c!=='Moved').map(([c,k])=>k+' '+c.toLowerCase()).join(' · ')}</div></button>`):'<p class="note">The two files have the same settings.</p>');
     if(!rows.length)return;
     const t=makeTable({rows,name:'changes',cols:[
       {label:'Area',get:r=>r.area},

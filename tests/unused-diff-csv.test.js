@@ -115,11 +115,29 @@ test('diffModels: identical rules are paired one to one', () => {
   eq(short(d), [['Firewall rules', 'Removed', 'Allow LAN → DMZ · Any → Any · RDP']]);
 });
 
-test('diffModels: a rule that moved to another position is reported', {
-  todo: 'Rules are matched by content only, so moving a rule above or below another (which changes what the firewall does) shows no difference.',
-}, () => {
+test('diffModels: a rule that moved to another position is reported', () => {
   const a = { from: 'LAN', to: 'DMZ', svc: 'RDP' }, b = { from: 'LAN', to: 'DMZ', action: 'Deny' };
-  assert.notEqual(diff(office().rule(a).rule(b).map(), office().rule(b).rule(a).map()).length, 0);
+  eq(diff(office().rule(a).rule(b).map(), office().rule(b).rule(a).map()), [
+    { area: 'Firewall rules', change: 'Moved', item: 'Deny LAN → DMZ · Any → Any · Any', before: '#2 · on', after: '#1 · on · now checked before rule #2' },
+  ]);
+});
+
+test('diffModels: inserting one rule does not mark the rules below it as moved', () => {
+  const r = svc => ({ from: 'LAN', to: 'DMZ', svc });
+  const A = office().rule(r('SSH')).rule(r('RDP')).rule(r('DNS')).map();
+  const B = office().rule(r('SSH')).rule(r('HTTPS')).rule(r('RDP')).rule(r('DNS')).map();
+  eq(short(diff(A, B)), [['Firewall rules', 'Added', 'Allow LAN → DMZ · Any → Any · HTTPS']]);
+  eq(short(diff(B, A)), [['Firewall rules', 'Removed', 'Allow LAN → DMZ · Any → Any · HTTPS']]);
+});
+
+test('diffModels: order only counts within a zone pair; a rule moved to the end says what it follows', () => {
+  const lan = svc => ({ from: 'LAN', to: 'DMZ', svc }), wan = { from: 'WAN', to: 'DMZ', svc: 'HTTPS' };
+  /* the WAN rule jumping over LAN rules changes nothing; RDP going from first to last does */
+  const A = office().rule(lan('RDP')).rule(lan('SSH')).rule(wan).rule(lan('DNS')).map();
+  const B = office().rule(wan).rule(lan('SSH')).rule(lan('DNS')).rule(lan('RDP')).map();
+  eq(diff(A, B).map(x => [x.change, x.item, x.after]), [
+    ['Moved', 'Allow LAN → DMZ · Any → Any · RDP', '#4 · on · now checked after rule #3'],
+  ]);
 });
 
 test('diffModels: a changed NAT translation shows as removed + added', () => {
