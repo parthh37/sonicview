@@ -2,8 +2,11 @@ name: CSP check
 
 # sonicview.html allows its inline <script> and <style> by SHA-256 hash. If either changes without
 # re-running tools/update-csp.mjs, browsers refuse to run the app, so fail the pull request instead.
+# Also run on main: pull requests that each pass can still leave stale hashes once merged together.
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
