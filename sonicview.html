@@ -7,7 +7,7 @@
      the inline <script> and <style> below may run (by SHA-256 hash). style="" attributes stay allowed because the
      maps place their boxes with computed inline positions; style-src is only the fallback for browsers
      without style-src-elem/-attr. After editing the script or style, run: node tools/update-csp.mjs -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RpIY/vUyTeONoYb4Z78SH7ufdd5Dl6MTmCKr18Qeg88='; style-src 'unsafe-inline'; style-src-elem 'sha256-EWBMv0dn+Rxb0l0twOX5F7PoTYPp59Ckx+cNJpzgGvY='; style-src-attr 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-fOHq0pabSwWZ0CCjxesNPLie6lf4snMEfkGJl4L6Mm8='; style-src 'unsafe-inline'; style-src-elem 'sha256-2CWpx+JSMq+yt64cIoWxntPzwQ7F/aXW66ilC+sn89o='; style-src-attr 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>SonicView Firewall Visualizer</title>
 <style>
 :root{
@@ -64,11 +64,55 @@ h2:first-child{margin-top:4px}
 h3{font-size:15px;margin:0 0 8px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
 .note{font-size:13px;color:var(--ink2);background:var(--surface2);border-radius:8px;padding:8px 12px;margin:8px 0 12px}
-/* drop screen */
-.drop{max-width:640px;margin:8vh auto;text-align:center;border:2px dashed var(--axis);border-radius:16px;padding:40px 24px;background:var(--surface)}
-.drop h1{font-size:22px;margin:0 0 8px}
-.drop p{color:var(--ink2);margin:6px 0}
-.drop .btn{margin-top:14px;font-size:15px;padding:10px 18px}
+/* home: shown until a file is loaded. No display on #drop itself, so its hidden attribute keeps working */
+.home{max-width:1040px;margin:0 auto;padding:5vh 0 8px}
+.hero h1{font-size:clamp(30px,4.4vw,46px);line-height:1.08;letter-spacing:-.025em;font-weight:700;margin:0 0 12px;max-width:19ch;text-wrap:balance}
+.hero h1 code{font:600 .8em/1 ui-monospace,Consolas,monospace;letter-spacing:-.02em;color:var(--accent);background:var(--accent-soft);padding:.04em .26em .1em;border-radius:.2em}
+.lede{font-size:16.5px;line-height:1.5;color:var(--ink2);margin:0 0 22px;max-width:62ch;text-wrap:pretty}
+/* the drop zone is filled with what an export really holds: key=value& settings */
+.dropzone{position:relative;overflow:hidden;display:grid;place-items:center;min-height:260px;padding:32px 20px;border:2px dashed var(--axis);border-radius:16px;background:var(--surface);text-align:center}
+.raw{position:absolute;inset:0;margin:0;padding:12px 0;font:12px/1.8 ui-monospace,Consolas,monospace;color:var(--muted);opacity:.7;white-space:pre;overflow:hidden;user-select:none;pointer-events:none;
+  -webkit-mask-image:radial-gradient(ellipse 40% 46% at 50% 50%,transparent 40%,#000 100%);mask-image:radial-gradient(ellipse 40% 46% at 50% 50%,transparent 40%,#000 100%)}
+.dz-c{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px}
+.dropzone .btn{font-size:16px;font-weight:600;padding:12px 24px;border-radius:10px;box-shadow:0 1px 0 rgba(0,0,0,.08),0 6px 18px -6px var(--accent)}
+.dz-or{color:var(--ink2)}
+.dz-c .err{margin:2px 0 0;max-width:46ch}
+.dz-c .err:empty{display:none}
+body.dragging .dropzone{border-style:solid;border-color:var(--accent);background:var(--accent-soft)}
+body.dragging .raw{color:var(--accent);opacity:1}
+@media (prefers-reduced-motion:no-preference){.dropzone,.raw{transition:color .2s,background-color .2s,border-color .2s,opacity .2s}}
+/* on the home page the drop zone lights up instead of the full-page overlay, and the header drops what needs a file */
+body.dragging:has(#drop:not([hidden])) #dragOverlay{display:none}
+body:has(#drop:not([hidden])) :is(#searchForm,#openBtn){display:none}
+body:has(#drop:not([hidden])) #themeBtn{margin-left:auto}
+.trust{display:flex;gap:9px;align-items:flex-start;margin:14px 2px 0;color:var(--ink2);max-width:80ch}
+.trust svg{flex:none;margin-top:2px;color:var(--good-ink)}
+.trust b{color:var(--ink)}
+.howto{margin:8px 2px 0;color:var(--ink2)}
+.howto summary{cursor:pointer;color:var(--accent);width:max-content;max-width:100%;padding:2px 0}
+.howto summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.howto[open] summary{margin-bottom:6px}
+.howto ul{margin:4px 0 8px;padding-left:20px}
+.howto li{margin:3px 0}
+.howto p{margin:6px 0;max-width:80ch}
+.jobs-h{margin:44px 0 14px}
+/* each job is a column of a heading and three cards; subgrid lines the cards up across columns */
+.jobs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px}
+.job{display:grid;grid-row:span 4;grid-template-rows:subgrid;align-content:start;gap:10px}
+.job h3{font-size:12.5px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0;align-self:end}
+.feat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 13px 12px}
+.feat b{display:block;font-weight:650;margin-bottom:7px}
+.ex{margin:0;font:12px/1.65 ui-monospace,Consolas,monospace;color:var(--ink2);white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.ex .risk{color:var(--crit);font-weight:700}
+.ex .add{color:var(--good-ink);font-weight:700}
+.ex .del{color:var(--crit);font-weight:700}
+.ex-grid{display:grid;grid-template-columns:repeat(16,minmax(0,13px));gap:2px}
+.ex-grid i{aspect-ratio:1;border-radius:3px}
+.homefoot{margin:26px 2px 0;color:var(--muted);font-size:12.5px}
+@media (max-width:760px){.jobs{grid-template-columns:minmax(0,1fr)}.job+.job h3{margin-top:14px}.dropzone{min-height:220px}.home{padding-top:3vh}
+  .raw{opacity:.55;-webkit-mask-image:radial-gradient(ellipse 90% 38% at 50% 50%,transparent 58%,#000 100%);mask-image:radial-gradient(ellipse 90% 38% at 50% 50%,transparent 58%,#000 100%)}}
+/* phones can't drag files in */
+@media (hover:none) and (pointer:coarse){.dz-or{display:none}}
 .err{color:var(--crit);font-weight:600}
 #dragOverlay{position:fixed;inset:0;z-index:99;display:none;align-items:center;justify-content:center;background:rgba(42,120,214,.15);border:4px dashed var(--accent);font-size:22px;font-weight:650;color:var(--ink)}
 body.dragging #dragOverlay{display:flex}
@@ -269,12 +313,73 @@ button.tile{font:inherit;color:inherit;width:100%}
 <div id="errBanner" class="errbar" hidden></div>
 </div>
 <main>
-  <section id="drop" class="drop">
-    <h1>Open a SonicWall settings file</h1>
-    <p>Drag your <b>.exp</b> file onto this page, or click the button.</p>
-    <p class="muted">The file stays on this computer. Nothing is uploaded.</p>
-    <button class="btn" type="button" id="dropBtn">Choose .exp file</button>
-    <p id="dropErr" class="err"></p>
+  <section id="drop" class="home" aria-labelledby="homeTitle">
+    <div class="hero">
+      <h1 id="homeTitle">See inside a SonicWall <code>.exp</code> file</h1>
+      <p class="lede">Get a network map, every port forward, rule problems, unused objects and a migration checklist from the settings file your firewall exports.</p>
+    </div>
+    <div class="dropzone">
+      <!-- made-up settings in the export's own key=value& format; documentation and private IPs only -->
+<pre class="raw" aria-hidden="true">shortProdName=TZ%20400&amp;buildNum=SonicOS%20Enhanced%206.5.4.4&amp;firewallName=front-office&amp;iface_name_0=X0&amp;interface_Zone_0=LAN&amp;iface_lan_ip_0=192.168.10.1&amp;iface_lan_mask_0=255.255.255.0&amp;
+Zone_1=WAN&amp;iface_static_ip_1=203.0.113.2&amp;iface_static_mask_1=255.255.255.248&amp;iface_static_gateway_1=203.0.113.1&amp;iface_https_mgmt_1=0&amp;iface_ping_mgmt_1=1&amp;iface_name_2=X2&amp;interface_Zone_2=DMZ&amp;
+addrObjId_0=Mail%20Server&amp;addrObjType_0=1&amp;addrObjZone_0=LAN&amp;addrObjIp1_0=192.168.10.25&amp;addrObjIp2_0=255.255.255.255&amp;addrObjId_1=Public%20Mail&amp;addrObjType_1=1&amp;addrObjZone_1=WAN&amp;
+ObjIp1_1=203.0.113.5&amp;svcObjId_0=HTTPS&amp;svcObjType_0=1&amp;svcObjIpType_0=6&amp;svcObjPort1_0=443&amp;svcObjPort2_0=443&amp;svcObjId_1=RDP&amp;svcObjIpType_1=6&amp;svcObjPort1_1=3389&amp;svcObjPort2_1=3389&amp;svcObjId_2=
+policyAction_0=2&amp;policySrcZone_0=WAN&amp;policyDstZone_0=LAN&amp;policySrcNet_0=&amp;policyDstNet_0=Public%20Mail&amp;policyDstSvc_0=HTTPS&amp;policyEnabled_0=1&amp;policyComment_0=Mail%20in&amp;policyAction_1=2&amp;
+natPolicyOrigSrc_0=&amp;natPolicyOrigDst_0=Public%20Mail&amp;natPolicyOrigSvc_0=HTTPS&amp;natPolicyTransDst_0=Mail%20Server&amp;natPolicySrcIface_0=1&amp;natPolicyEnabled_0=1&amp;natPolicyReflexive_0=1&amp;natPolicyOrig
+prefs_dhdynstart_0=192.168.10.100&amp;prefs_dhdynend_0=192.168.10.200&amp;prefs_dhdynrouter_0=192.168.10.1&amp;prefs_dhdynsubnetmask_0=255.255.255.0&amp;prefs_dhdynscopeactive_0=on&amp;prefs_dhdynlease_0=1440&amp;
+ipsecName_0=Branch%20Office&amp;ipsecGwAddr_0=198.51.100.7&amp;ipsecSecGwAddr_0=0.0.0.0&amp;ipsecLocalNetwork_0=LAN%20Subnets&amp;ipsecRemoteNetwork_0=Branch%20LAN&amp;ipsecSaDisabled_0=off&amp;ipsecName_1=
+addrObjId_2=Old%20Printer&amp;addrObjIp1_2=192.168.10.61&amp;addrObjId_3=Camera%20NVR&amp;addrObjIp1_3=192.168.10.70&amp;addrObjId_4=Guest%20Wi-Fi&amp;addrObjType_4=4&amp;addrObjIp1_4=192.168.20.0&amp;addrObjIp2_4=
+pbrObjId_0=Branch%20route&amp;pbrObjDst_0=Branch%20LAN&amp;pbrObjGw_0=172.16.5.254&amp;pbrObjIfaceName_0=X2&amp;pbrObjMetric_0=10&amp;userObjId_0=admin-backup&amp;uo_atomToGrp_0=admin-backup&amp;uo_grpToGrp_0=
+policyAction_7=0&amp;policySrcZone_7=LAN&amp;policyDstZone_7=WAN&amp;policySrcNet_7=Guest%20Wi-Fi&amp;policyDstSvc_7=&amp;policyEnabled_7=1&amp;policyAction_8=2&amp;policySrcZone_8=LAN&amp;policyDstZone_8=WAN&amp;policyDst
+so_atomToGrp_0=HTTP&amp;so_grpToGrp_0=Web&amp;so_atomToGrp_1=HTTPS&amp;so_grpToGrp_1=Web&amp;addro_atomToGrp_0=Mail%20Server&amp;addro_grpToGrp_0=Servers&amp;addro_atomToGrp_1=Web%20Server&amp;addro_grpToGrp_1=
+iface_name_3=X0:V20&amp;iface_vlan_tag_3=20&amp;iface_vlan_parent_3=0&amp;interface_Zone_3=LAN&amp;iface_lan_ip_3=192.168.20.1&amp;iface_lan_mask_3=255.255.255.0&amp;iface_comment_3=Guest%20Wi-Fi&amp;iface_https
+natPolicyOrigSvc_3=RDP&amp;natPolicyTransDst_3=192.168.10.40&amp;natPolicySrcIface_3=1&amp;natPolicyEnabled_3=1&amp;natPolicyComment_3=remote%20desktop&amp;svcObjId_5=Telnet&amp;svcObjPort1_5=23&amp;svcObjPort2_5=23&amp;</pre>
+      <div class="dz-c">
+        <button class="btn" type="button" id="dropBtn">Choose .exp file</button>
+        <span class="dz-or">or drop it anywhere on this page</span>
+        <p id="dropErr" class="err" role="alert"></p>
+      </div>
+    </div>
+    <p class="trust"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7.5" rx="1.6"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+      <span><b>Nothing is uploaded.</b> Only this page reads the file, and its security policy makes the browser block every network request. No account, no analytics.</span></p>
+    <details class="howto">
+      <summary>Where do I get the .exp file?</summary>
+      <p>Sign in to the SonicWall's web interface and use <b>Export Settings</b>:</p>
+      <ul><li>SonicOS 5.x: <b>System › Settings</b></li><li>SonicOS 6.x: <b>Manage › Firmware &amp; Settings</b></li></ul>
+      <p class="muted">SonicView reads the classic SonicOS .exp format and was tested with SonicOS 5.8. Treat the file like a password: it holds your network layout, rules and encrypted credentials.</p>
+    </details>
+
+    <h2 class="jobs-h">What you get from one file</h2>
+    <div class="jobs">
+      <div class="job"><h3>Understand it</h3>
+        <div class="feat"><b>Network map</b><pre class="ex">Internet ─ X1 WAN ─┬─ X0 LAN
+                   ├─ X2 DMZ
+                   └─ 2 VPN peers</pre></div>
+        <div class="feat"><b>Port map</b><pre class="ex">203.0.113.5:443  → Mail Server
+203.0.113.5:3389 → 192.168.10.40 <span class="risk">RDP</span></pre></div>
+        <div class="feat"><b>IP map</b>
+          <div class="ex-grid" role="img" aria-label="Example: a subnet's addresses colored by interface, used, DHCP and free"><i class="st-res"></i><i class="st-iface"></i><i class="st-used"></i><i class="st-used"></i><i class="st-free"></i><i class="st-used"></i><i class="st-free"></i><i class="st-free"></i><i class="st-used"></i><i class="st-free"></i><i class="st-free"></i><i class="st-free"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-dhcp"></i><i class="st-free"></i><i class="st-free"></i><i class="st-free"></i><i class="st-res"></i></div>
+          <pre class="ex">192.168.10.0/27 · 9 free</pre></div>
+      </div>
+      <div class="job"><h3>Clean it up</h3>
+        <div class="feat"><b>Rule problems</b><pre class="ex">#9  Block never works (#4 allows)
+#12 Duplicate rule (same as #7)</pre></div>
+        <div class="feat"><b>Unused objects</b><pre class="ex">Old Printer   192.168.10.61
+Camera NVR    192.168.10.70
+21 more that nothing refers to</pre></div>
+        <div class="feat"><b>Search</b><pre class="ex">192.168.10.25
+→ 2 rules · 1 NAT policy · 1 group</pre></div>
+      </div>
+      <div class="job"><h3>Replace it</h3>
+        <div class="feat"><b>Compare</b><pre class="ex"><span class="add">+</span> 4 rules   <span class="del">−</span> 2 NAT policies
+~ 6 address objects changed</pre></div>
+        <div class="feat"><b>Migration guide</b><pre class="ex">Old X2 → new X3   (port plan)
+☐ Re-create 12 port forwards</pre></div>
+        <div class="feat"><b>Report</b><pre class="ex">4 high risks · 31 clean-up items
+Print it or save it as a PDF</pre></div>
+      </div>
+    </div>
+    <p class="homefoot">Free and open source (MIT) · One HTML file that also works offline · <a href="https://github.com/parthh37/sonicview" target="_blank" rel="noopener">Source on GitHub</a></p>
   </section>
   <div id="views"></div>
   <div class="foot" id="foot" hidden></div>
@@ -2264,7 +2369,18 @@ function loadText(text,name,save){
     if(M){showError(e.message);}else{$('#drop').hidden=false;err.textContent=e.message;}
   }
 }
-async function loadFile(file){loadText(await file.text(),file.name,true);}
+/* Runs before a picked or dropped file is read. Returns why it can't be a settings export
+   (shown on the home page, or in the red bar once a file is open), or '' to go ahead.
+   file.name, file.size (bytes) and file.type are all there is to go on: nothing is read yet. */
+function fileProblem(file){
+  // TODO(you): catch the common wrong files before reading them
+  return '';
+}
+async function loadFile(file){
+  const why=fileProblem(file);
+  if(why){if(M)showError(why);else $('#dropErr').textContent=why;return;}
+  loadText(await file.text(),file.name,true);
+}
 
 /* ---------- routing: the URL always shows the current page ---------- */
 function route(){
