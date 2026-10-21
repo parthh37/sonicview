@@ -8,6 +8,18 @@ uploaded anywhere.
 
 **▶ Use it now: https://parthh37.github.io/sonicview/**
 
+No SonicWall at hand? Click **Try with sample data** on the start page, or open
+**[the sample directly](https://parthh37.github.io/sonicview/?sample)**. The sample is a made-up office
+firewall (documentation IP ranges only) with a few rule problems planted in it.
+
+| Network map | Port map |
+| --- | --- |
+| [![Network map: WAN links, VPN peer and inside zones around the firewall](docs/screenshots/network-map.png)](docs/screenshots/network-map.png) | [![Port map: public IPs, ports and inside hosts, with risky RDP and SMB ports in red](docs/screenshots/port-map.png)](docs/screenshots/port-map.png) |
+
+[![Rule problems: duplicate, shadowed, wide-open and risky rules, with the reason for each](docs/screenshots/rule-problems.png)](docs/screenshots/rule-problems.png)
+
+<sub>Screenshots show the built-in sample data, not a real network.</sub>
+
 ## Features
 
 | Area | What you get |
@@ -90,6 +102,12 @@ you edit either one, refresh the hashes (CI fails on a pull request whose hashes
 ```bash
 node tools/update-csp.mjs
 ```
+
+The sample data is defined in [`tools/make-sample.mjs`](tools/make-sample.mjs). After you change it, run
+`node tools/make-sample.mjs` to rebuild the copy embedded in `sonicview.html`
+(`--raw` prints the settings as readable `key=value` lines instead). It sits in a non-running
+`<script type="text/plain">` block, so it needs no CSP hash. `tests/sample.test.js` checks that it still
+trips every rule problem once.
 
 ## Contributing
 
