@@ -23,9 +23,11 @@ const hash = s => `'sha256-${createHash('sha256').update(s.replace(/\r\n?/g, '\n
 const blocks = [...html.matchAll(/<!--[\s\S]*?-->|<(script|style)(\s[^>]*)?>([\s\S]*?)<\/\1\s*>/gi)]
   .filter(m => m[1]).map(m => ({ tag: m[1].toLowerCase(), attrs: m[2] || '', body: m[3], index: m.index }));
 const of = tag => blocks.filter(b => b.tag === tag);
+/* data blocks such as <script type="text/plain" id="sampleExp"> never run, so CSP does not cover them */
+const runs = b => ['', 'text/javascript', 'application/javascript', 'module'].includes(/\btype\s*=\s*["']?([^"'\s>]*)/i.exec(b.attrs)?.[1].toLowerCase() ?? '');
 
 if (of('script').some(b => /\bsrc\s*=/i.test(b.attrs))) fail('found a <script src>; SonicView must stay one self-contained file');
-const want = { 'script-src': of('script').map(b => hash(b.body)), 'style-src-elem': of('style').map(b => hash(b.body)) };
+const want = { 'script-src': of('script').filter(runs).map(b => hash(b.body)), 'style-src-elem': of('style').map(b => hash(b.body)) };
 
 const metaRe = /(<meta http-equiv="Content-Security-Policy" content=")([^"]*)(">)/i;
 const meta = metaRe.exec(html);
